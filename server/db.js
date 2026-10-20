@@ -68,6 +68,25 @@ export function openDb(file = process.env.DB_FILE ?? resolve('data', 'letackomat
       checked INTEGER NOT NULL DEFAULT 0,
       added_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+
+    -- upozornění: pravidla hlídače (slovo v názvu nebo konkrétní produkt) a už odeslaná oznámení
+    CREATE TABLE IF NOT EXISTS watch_rules (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      kind TEXT NOT NULL CHECK (kind IN ('keyword', 'product')),
+      value TEXT NOT NULL,               -- keyword: normalizovaná slova; product: product_slug
+      label TEXT NOT NULL,               -- co se ukazuje uživateli
+      min_discount INTEGER,
+      max_price REAL,
+      shops TEXT,                        -- slugy obchodů oddělené čárkou, NULL = všechny
+      enabled INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE IF NOT EXISTS notifications (
+      rule_id INTEGER NOT NULL REFERENCES watch_rules(id) ON DELETE CASCADE,
+      deal_id INTEGER NOT NULL,
+      sent_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (rule_id, deal_id)
+    );
   `);
   migrateFavoritesToCart(db);
   ensureUnitColumns(db);

@@ -8,6 +8,7 @@ Akční ceny ze všech českých obchodů na jednom místě. Funguje jako web i 
 - **porovnání cen**: u produktu ceny ve všech obchodech vedle sebe, přepočet na 1 kg / 1 l / 1 ks, nejlevnější varianta a historie cen
 - řazení podle ceny za jednotku (Nejlevnější za jednotku)
 - **nákupní seznam** se sekcemi, odškrtáváním a přepínačem Všechny / Jen v akci; položka zůstává, dokud ji nesmažeš
+- **upozornění**: Windows oznámení na pozadí, když je ve slevě hlídané slovo v názvu (třeba Jägermeister) nebo konkrétní produkt
 
 ## Stažení a spuštění (Windows)
 
@@ -92,6 +93,12 @@ Na mobilu k appce přistupuj přes adresu počítače v síti (`HOST=0.0.0.0 npm
 | `POST /api/scrape?shops=` | Spustí stažení dat (jen z tohoto počítače, vyžaduje hlavičku `X-Letackomat: 1`) |
 | `POST /api/shutdown` | Vypne server (jen z tohoto počítače, vyžaduje hlavičku `X-Letackomat: 1`) |
 | `GET /api/update` | Je na GitHubu novější verze? (výsledek se na 6 hodin cachuje, `?force=1` jen z tohoto počítače) |
+| `GET /api/alerts`, `PUT /api/alerts/settings` | Stav upozornění a zapnutí / vypnutí oznámení na pozadí (jen z tohoto počítače) |
+| `GET/POST /api/alerts/rules`, `PATCH/DELETE /api/alerts/rules/:id` | Pravidla hlídače: `kind` (`keyword` / `product`), `value`, `minDiscount`, `maxPrice`, `shops`, `enabled` |
+| `GET /api/alerts/preview` | Co by pravidlo teď chytilo, bez uložení |
+| `POST/DELETE /api/alerts/watch/:slug` | Zvonek u produktu: hlídat / přestat hlídat |
+| `POST /api/alerts/test`, `POST /api/alerts/run` | Zkušební oznámení; okamžitá kontrola pravidel |
+| `GET /api/products?q=` | Hledání produktů podle názvu (výběr produktu k hlídání) |
 | `POST /api/update/apply` | Stáhne novou verzi, vypne server a spustí aktualizaci (jen z tohoto počítače, vyžaduje hlavičku `X-Letackomat: 1`) |
 
 Příklady:
@@ -106,6 +113,23 @@ Každá položka vrací `priceSale`, `priceOrig`, `discountPct`, `validFrom`, `v
 Košík u produktu ho přidá do seznamu. Položka se ukládá do databáze a zůstane, dokud ji nesmažeš, i když akce skončí.
 U každé položky vidíš slevy v právě vybraném období, jinak poslední známou akci. Položky jdou řadit do vlastních sekcí
 (třeba Kalba, Žrádlo) a odškrtávat jako koupené.
+
+## Upozornění (oznámení ve Windows)
+
+V záložce **Upozornění** přidáš pravidla a zapneš přepínač **Oznámení na pozadí**:
+
+- **Slovo v názvu**: hlídá každý produkt, který má slovo v názvu (bez ohledu na diakritiku a velikost písmen), třeba Jägermeister.
+- **Konkrétní produkt**: najdeš ho podle názvu a vybereš ze seznamu. Rychle jde i zvonkem u produktu na kartě nebo v nákupním seznamu.
+- Volitelně **sleva od** (%), **cena do** (Kč) a **vybrané obchody**. Při zadávání vidíš, kolik akcí pravidlu teď odpovídá.
+
+Jak to funguje:
+
+- Po zapnutí přepínače se do složky Po spuštění ve Windows (`shell:startup`) uloží malý skript `Letackomat-na-pozadi.vbs`, který po přihlášení spustí aplikaci skrytě na pozadí. Vypnutím přepínače se smaže.
+- Po každém stažení dat (6:00, 14:00 a při startu, když jsou data starší než 20 hodin) se vyhodnotí pravidla. Když se PC dlouho nepoužíval, zameškané slevy přijdou při dalším startu v jednom souhrnném oznámení.
+- Oznámí se akce platná dnes nebo začínající do 3 dnů, každá jednou. Akce, které jsou ve slevě už při vytvoření pravidla, se neoznamují (uvidíš je u pravidla), oznámení chodí u nových.
+- Oznámení se zobrazí jako běžné Windows oznámení pod názvem Letáčkomat, kliknutím se otevře aplikace. Při prvním oznámení se ve Windows zaregistruje název aplikace (klíč v `HKCUSoftwareClassesAppUserModelIdLetackomat`, bez admin práv, smazat ho jde ručně).
+- Tlačítko **Poslat zkušební oznámení** ukáže, jak oznámení vypadá. Když se neukáže, zkontroluj ve Windows Nastavení, Systém, Oznámení, že nejsou vypnutá, a že není zapnutý režim Soustředění.
+- Upozornění jsou jen na počítači, kde aplikace běží (z mobilu v síti se záložka nezobrazí).
 
 ## Odkud data jsou a co to znamená
 
@@ -134,6 +158,7 @@ které sbírá letáky všech řetězců na jednom místě (`/slevy/<obchod>`, p
 | `SHOPS` | viz `DEFAULT_SHOPS` | Obchody ke stažení, např. `albert,lidl` |
 | `NO_SCRAPE` | | `1` vypne automatické stahování |
 | `NO_UPDATE_CHECK` | | `1` vypne kontrolu nových verzí |
+| `NO_ALERTS` | | `1` vypne automatické vyhodnocování upozornění |
 
 Seznam obchodů je v `DEFAULT_SHOPS` v [`server/scraper/kupi.js`](server/scraper/kupi.js). Slug obchodu najdeš v adrese `kupi.cz/slevy/<slug>`.
 

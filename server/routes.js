@@ -3,22 +3,15 @@ import { CATEGORY_LABELS } from './categories.js';
 import { cartSlugs, registerCart } from './cart.js';
 import { getMeta } from './db.js';
 import { installId } from './install.js';
+import { isLocal, isTrusted } from './local.js';
 import { registerProduct } from './product.js';
+import { registerAlerts } from './watch/routes.js';
 import { buildFilter, SORTS, splitCsv, toItem } from './query.js';
 import { isScraping, runScrape } from './scraper/run.js';
 import { readPackage } from './update.js';
 import { addDays, isISODate, todayISO } from './util.js';
 
-const LOOPBACK = ['127.0.0.1', '::1', '::ffff:127.0.0.1'];
-const LOCAL_HOST = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i;
-
-/** Požadavek z toho samého počítače (ne z mobilu v síti, ne přes cizí doménu = ochrana proti DNS rebindingu). */
-export const isLocal = (req) => LOOPBACK.includes(req.ip) && LOCAL_HOST.test(req.headers.host ?? '');
-
-/** Akce měnící stav serveru: jen lokálně a s vlastní hlavičkou (cizí web ji bez CORS nepošle). */
-export const isTrusted = (req) => isLocal(req) && req.headers['x-letackomat'] === '1';
-
-export function registerRoutes(app, db, { onShutdown, update } = {}) {
+export function registerRoutes(app, db, { onShutdown, update, alerts } = {}) {
   const version = readPackage().version;
   const id = installId();
 
@@ -108,6 +101,7 @@ export function registerRoutes(app, db, { onShutdown, update } = {}) {
 
   registerCart(app, db);
   registerProduct(app, db);
+  if (alerts) registerAlerts(app, db, alerts);
 
   /** Je k dispozici novější verze na GitHubu? (výsledek se cachuje, ?force=1 jen z tohoto počítače) */
   app.get('/api/update', async (req) => {

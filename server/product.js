@@ -1,7 +1,7 @@
 // Porovnání cen jednoho produktu: nabídky v obchodech v zvoleném období + historie z našich dat.
 import { cartSlugs } from './cart.js';
 import { resolvePeriod, toItem, VALID_ON } from './query.js';
-import { isISODate } from './util.js';
+import { isISODate, normalize } from './util.js';
 
 const DEAL_SELECT = 'SELECT d.*, s.name AS shop_name, s.logo_url FROM deals d JOIN shops s ON s.slug = d.shop_slug';
 const HISTORY_DAYS = 365;
@@ -37,6 +37,32 @@ export function rankOffers(items) {
 }
 
 export function registerProduct(app, db) {
+  /** Hledání produktů podle názvu napříč vším, co kdy bylo v akci (výběr produktu pro hlídání). */
+  app.get('/api/products', async (req) => {
+    const words = normalize(req.query.q ?? '').split(/\s+/).filter(Boolean).slice(0, 6);
+    if (!words.length) return { products: [] };
+    const params = {};
+    const where = words.map((w, i) => {
+      params[`w${i}`] = `%${w.replace(/[\\%_]/g, '\\$&')}%`;
+      return `name_norm LIKE @w${i} ESCAPE '\\'`;
+    });
+    const rows = db
+      .prepare(
+        `SELECT product_slug, name, quantity, image_url, MAX(last_seen) AS last_seen FROM deals
+         WHERE ${where.join(' AND ')} GROUP BY product_slug ORDER BY last_seen DESC, name LIMIT 12`,
+      )
+      .all(params);
+    return {
+      products: rows.map((r) => ({
+        slug: r.product_slug,
+        name: r.name,
+        quantity: r.quantity,
+        image: /^https?:\/\//.test(r.image_url ?? '') ? r.image_url : null,
+        lastSeen: r.last_seen,
+      })),
+    };
+  });
+
   app.get('/api/products/:slug', async (req, reply) => {
     for (const key of ['date', 'to']) {
       if (req.query[key] && !isISODate(req.query[key])) {

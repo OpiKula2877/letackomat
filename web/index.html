@@ -22,6 +22,7 @@
       <nav class="tabs" aria-label="Zobrazení">
         <button class="tab" data-view="all" aria-pressed="true">Všechny akce</button>
         <button class="tab" data-view="cart" aria-pressed="false">Nákupní seznam <span class="tab__n" id="cartCount">0</span></button>
+        <button class="tab" data-view="alerts" aria-pressed="false" id="alertsTab" hidden>Upozornění <span class="tab__n" id="alertCount">0</span></button>
       </nav>
       <div class="updwrap" id="updWrap" hidden>
         <button class="updbtn" id="updBtn" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="upd" aria-label="Je dostupná aktualizace" title="Je dostupná aktualizace">
@@ -100,6 +101,50 @@
         <button type="button" class="cart__btn" id="clearChecked" hidden>Smazat odškrtnuté</button>
       </div>
       <div class="cart__list" id="cartList"></div>
+    </section>
+
+    <section class="alerts" id="alerts" hidden aria-label="Upozornění">
+      <div class="al-card al-master">
+        <div class="al-master__text">
+          <h2 id="alSwitchLabel">Oznámení na pozadí</h2>
+          <p id="alState" aria-live="polite"></p>
+        </div>
+        <button type="button" class="switch" id="alSwitch" role="switch" aria-checked="false" aria-labelledby="alSwitchLabel"><span class="switch__knob"></span></button>
+      </div>
+      <p class="al-warn" id="alWarn" hidden></p>
+      <div class="al-actions">
+        <button type="button" class="cart__btn" id="alTest">Poslat zkušební oznámení</button>
+        <button type="button" class="cart__btn" id="alRun">Zkontrolovat teď</button>
+      </div>
+
+      <form class="al-card al-form" id="alForm" autocomplete="off">
+        <h2>Co hlídat</h2>
+        <div class="seg" id="alKind" role="group" aria-label="Druh pravidla">
+          <button type="button" data-kind="keyword" aria-pressed="true">Slovo v názvu</button>
+          <button type="button" data-kind="product" aria-pressed="false">Konkrétní produkt</button>
+        </div>
+        <p class="al-hint" id="alKindHint">Oznámí každý produkt, který má slovo v názvu, třeba každé pití s názvem Jägermeister.</p>
+        <input class="al-input" id="alInput" type="search" placeholder="Např. Jägermeister" aria-label="Slovo v názvu" maxlength="60" enterkeyhint="done">
+        <ul class="al-pick" id="alPick" hidden role="listbox" aria-label="Nalezené produkty"></ul>
+        <div class="al-cond">
+          <label class="al-field"><span>Sleva od</span>
+            <select id="alMin" aria-label="Minimální sleva">
+              <option value="">Jakákoli</option>
+              <option value="10">10 %</option><option value="20">20 %</option><option value="30">30 %</option><option value="40">40 %</option><option value="50">50 %</option>
+            </select>
+          </label>
+          <label class="al-field"><span>Cena do (Kč)</span>
+            <input class="al-input al-input--num" id="alMax" type="number" min="1" step="any" inputmode="decimal" placeholder="Jakákoli">
+          </label>
+        </div>
+        <div class="al-shops" id="alShops" role="group" aria-label="Obchody (žádný vybraný = všechny)"></div>
+        <p class="al-preview" id="alPreview" aria-live="polite"></p>
+        <button type="submit" class="al-add" id="alAdd">Přidat pravidlo</button>
+        <p class="al-hint">Akce, které jsou ve slevě už teď, ti nepřijdou jako oznámení. Uvidíš je tady u pravidla. Oznámení přijde u dalších nových akcí.</p>
+      </form>
+
+      <h2 class="al-h">Moje pravidla <span class="al-h__n" id="alCount"></span></h2>
+      <div class="al-list" id="alList"></div>
     </section>
   </main>
 

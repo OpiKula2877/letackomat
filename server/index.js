@@ -8,13 +8,25 @@ import { getMeta, openDb } from './db.js';
 import { registerRoutes } from './routes.js';
 import { runScrape } from './scraper/run.js';
 import { createUpdateService } from './update.js';
+import { createAlerts } from './watch/alerts.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
-export function buildApp(db, { logger = false, onShutdown, update } = {}) {
+export function buildApp(db, { logger = false, onShutdown, update, alerts } = {}) {
   // forceCloseConnections: otevřené spojení prohlížeče (keep-alive) nesmí vypnutí zablokovat
   const app = Fastify({ logger, forceCloseConnections: true });
-  registerRoutes(app, db, { onShutdown, update });
+  // prázdné tělo s hlavičkou application/json (např. POST bez dat) je v pořádku, ne chyba 400
+  app.addContentTypeParser('application/json', { parseAs: 'string' }, (req, body, done) => {
+    if (!body) return done(null, undefined);
+    try {
+      done(null, JSON.parse(body));
+    } catch {
+      const err = new Error('Neplatný JSON');
+      err.statusCode = 400;
+      done(err, undefined);
+    }
+  });
+  registerRoutes(app, db, { onShutdown, update, alerts });
   app.register(fastifyStatic, { root: resolve(here, '..', 'web'), maxAge: 0 });
   return app;
 }
@@ -34,9 +46,10 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     process.exit(0);
   }
 
-  const update = createUpdateService(db);
-  const app = buildApp(db, { logger: { level: 'info' }, onShutdown: shutdown, update });
   const port = Number(process.env.PORT) || 3000;
+  const update = createUpdateService(db);
+  const alerts = createAlerts(db, { port });
+  const app = buildApp(db, { logger: { level: 'info' }, onShutdown: shutdown, update, alerts });
   const host = process.env.HOST ?? '127.0.0.1';
   await app.listen({ port, host });
 
@@ -48,8 +61,12 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   process.on('exit', () => rmSync(pidFile, { force: true }));
   for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, shutdown);
 
+  // upozornění: po každém stažení dat a při startu (po delším vypnutí PC doběhne zameškané)
+  const checkAlerts = () => alerts.run().then((r) => r.matches && app.log.info(`upozornění: ${r.sent}/${r.matches} odesláno`)).catch((e) => app.log.error(e));
+  if (process.env.NO_ALERTS !== '1') setTimeout(checkAlerts, 20_000);
+
   if (process.env.NO_SCRAPE !== '1') {
-    const scrape = () => runScrape(db, undefined, (m) => app.log.info(m)).catch((e) => app.log.error(e));
+    const scrape = () => runScrape(db, undefined, (m) => app.log.info(m)).then(checkAlerts).catch((e) => app.log.error(e));
     cron.schedule('0 6,14 * * *', scrape, { timezone: 'Europe/Prague' });
     const last = getMeta(db, 'last_scrape');
     if (!last || Date.now() - Date.parse(last) > 20 * 3600 * 1000) scrape();

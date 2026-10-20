@@ -29,7 +29,7 @@ try {
   const saved = JSON.parse(localStorage.getItem('letackomat') ?? '{}');
   if (Array.isArray(saved.shops)) state.shops = new Set(saved.shops);
   if (saved.sort) state.sort = saved.sort;
-  if (saved.view === 'cart') state.view = 'cart';
+  if (saved.view === 'cart' || saved.view === 'alerts') state.view = saved.view;
   if (saved.onlySale === true) state.cart.onlySale = true;
 } catch { /* localStorage nemusí být dostupné */ }
 
@@ -454,6 +454,7 @@ function card(d) {
   el.style.setProperty('--shop-color', SHOP_COLORS[d.shop.slug] ?? 'var(--ink)');
   el.dataset.slug = d.productSlug;
   el.innerHTML = `
+    <button class="bellbtn" data-slug="${esc(d.productSlug)}" aria-pressed="${alertsState.watched.has(d.productSlug)}" aria-label="${alertsState.watched.has(d.productSlug) ? 'Přestat hlídat slevu' : 'Hlídat slevu'}: ${esc(d.name)}" title="${alertsState.watched.has(d.productSlug) ? 'Hlídám, kliknutím přestaneš' : 'Hlídat slevu a poslat oznámení'}"${alertsState.available ? '' : ' hidden'}>${bellIcon(alertsState.watched.has(d.productSlug))}</button>
     <button class="cartbtn" aria-pressed="${inCart}" aria-label="${inCart ? 'Odebrat z nákupního seznamu' : 'Přidat do nákupního seznamu'}: ${esc(d.name)}" title="${inCart ? 'V nákupním seznamu' : 'Přidat do nákupního seznamu'}">${cartIcon(inCart)}</button>
     <div class="deal__img ${d.image ? '' : 'deal__img--none'}">${d.image ? `<img src="${esc(d.image)}" alt="" loading="lazy">` : '🛒'}</div>
     <div class="deal__body">
@@ -472,6 +473,7 @@ function card(d) {
       <span class="deal__links"><button type="button" class="linkbtn cmpbtn">Porovnat ceny</button>${d.leafletUrl ? `<a href="${esc(d.leafletUrl)}" target="_blank" rel="noopener">V letáku</a>` : ''}</span>
     </div>`;
   el.querySelector('.cartbtn').addEventListener('click', () => toggleCart(d));
+  el.querySelector('.bellbtn').addEventListener('click', () => toggleWatch(d.productSlug));
   el.querySelector('.cmpbtn').addEventListener('click', () => openCompare(d.productSlug, d.name));
   return el;
 }
@@ -743,7 +745,10 @@ function cartRow(item) {
     <div class="item__main">
       <h3 class="item__name">${esc(item.name)}${item.quantity ? ` <small>${esc(item.quantity)}</small>` : ''}</h3>
       ${dealsHtml}
-      <button type="button" class="linkbtn item__cmp">Porovnat ceny a historii</button>
+      <span class="item__links">
+        <button type="button" class="linkbtn item__cmp">Porovnat ceny a historii</button>
+        <button type="button" class="linkbtn item__watch" data-slug="${esc(item.slug)}"${alertsState.available ? '' : ' hidden'}>${alertsState.watched.has(item.slug) ? 'Hlídám slevu ✓' : 'Hlídat slevu'}</button>
+      </span>
     </div>
     <div class="item__tools">
       <select class="item__sec" aria-label="Sekce pro ${esc(item.name)}">${options}</select>
@@ -751,6 +756,7 @@ function cartRow(item) {
     </div>`;
 
   el.querySelector('.item__cmp').addEventListener('click', () => openCompare(item.slug, item.name));
+  el.querySelector('.item__watch').addEventListener('click', () => toggleWatch(item.slug));
   el.querySelector('.dl__more')?.addEventListener('click', () => {
     el.querySelector('.dls').insertAdjacentHTML('beforeend', item.deals.slice(3).map((d) => dealLine(d, false)).join(''));
     el.querySelector('.dl--more').remove();
@@ -952,6 +958,7 @@ $('cmp').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.
 let reqId = 0;
 async function load(reset) {
   if (state.view === 'cart') return loadCart();
+  if (state.view === 'alerts') return loadAlerts();
   if (reset) {
     state.offset = 0;
     $('grid').replaceChildren(...Array.from({ length: 8 }, () => Object.assign(document.createElement('div'), { className: 'skeleton' })));
@@ -991,14 +998,17 @@ async function load(reset) {
 const plural = (n) => (n === 1 ? 'akce' : n >= 2 && n <= 4 ? 'akce' : 'akcí');
 
 function setView(view) {
+  if (view === 'alerts' && $('alertsTab').hidden) view = 'all'; // upozornění jsou jen na počítači, kde aplikace běží
   state.view = view;
   persist();
-  const cart = view === 'cart';
+  const deals = view === 'all';
   document.querySelectorAll('.tab').forEach((t) => t.setAttribute('aria-pressed', String(t.dataset.view === view)));
-  for (const el of [document.querySelector('.filters'), $('summary'), $('grid'), document.querySelector('.more')]) el.hidden = cart;
-  $('cart').hidden = !cart;
+  for (const el of [document.querySelector('.filters'), $('summary'), $('grid'), document.querySelector('.more')]) el.hidden = !deals;
+  $('cart').hidden = view !== 'cart';
+  $('alerts').hidden = view !== 'alerts';
+  document.querySelector('.days').hidden = view === 'alerts'; // upozornění na dni nezávisí
   load(true);
-  renderDays();
+  if (view !== 'alerts') renderDays();
 }
 
 async function init() {
@@ -1024,6 +1034,7 @@ async function init() {
     $('stopBtn').hidden = !state.health.canShutdown;
     document.querySelector('.brand').title = `Verze ${state.health.version}`;
     initUpdate(); // na pozadí, nic nezdržuje
+    await initAlerts(); // rychlé; potřebuje se vědět, jestli se má ukázat záložka a zvonky
   }
 
   setView(state.view);
@@ -1045,6 +1056,333 @@ $('minDiscount').addEventListener('change', (e) => { state.minDiscount = e.targe
 $('sort').addEventListener('change', (e) => { state.sort = e.target.value; persist(); load(true); });
 $('moreBtn').addEventListener('click', () => load(false));
 document.querySelectorAll('.tab').forEach((t) => t.addEventListener('click', () => setView(t.dataset.view)));
+
+/* ——— upozornění: hlídač slev s oznámením ve Windows ——— */
+const alertsState = { data: null, available: true, watched: new Set(), kind: 'keyword', picked: null, shops: new Set(), shopList: [] };
+async function alertsApi(method, path, body) {
+  // content-type jen s tělem; prázdné tělo s JSON hlavičkou by server odmítl jako Bad Request
+  const headers = body === undefined ? { 'x-letackomat': '1' } : { 'content-type': 'application/json', 'x-letackomat': '1' };
+  const res = await fetch(path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error ?? `chyba ${res.status}`);
+  return data;
+}
+
+const bellIcon = (on) => `<svg viewBox="0 0 24 24" width="21" height="21" fill="${on ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9a6 6 0 0 1 12 0c0 6.5 2.5 8 2.5 8h-17S6 15.5 6 9"/><path d="M10.2 20.5a2 2 0 0 0 3.6 0"/></svg>`;
+const whenText = (iso) => (iso ? new Date(iso).toLocaleString('cs-CZ', { dateStyle: 'short', timeStyle: 'short' }) : '');
+
+/** Zjistí, jestli jsou upozornění dostupná (jen na počítači, kde aplikace běží), a načte hlídané produkty. */
+async function initAlerts() {
+  try {
+    const [watched, status] = await Promise.all([api('/api/alerts/watched'), api('/api/alerts')]);
+    alertsState.watched = new Set(watched.slugs);
+    alertsState.data = status;
+    $('alertsTab').hidden = false;
+    updateAlertCount();
+  } catch {
+    alertsState.available = false; // například aplikace otevřená z mobilu v síti
+    document.querySelectorAll('.bellbtn, .item__watch').forEach((b) => (b.hidden = true));
+  }
+}
+
+function updateAlertCount() {
+  const rules = alertsState.data?.rules ?? [];
+  $('alertCount').textContent = rules.filter((r) => r.enabled).length;
+}
+
+function setBells(slug, on) {
+  if (on) alertsState.watched.add(slug);
+  else alertsState.watched.delete(slug);
+  const sel = CSS.escape(slug);
+  document.querySelectorAll(`.bellbtn[data-slug="${sel}"]`).forEach((b) => {
+    b.setAttribute('aria-pressed', String(on));
+    b.innerHTML = bellIcon(on);
+    const name = b.closest('.deal')?.querySelector('.deal__name')?.textContent ?? '';
+    b.setAttribute('aria-label', `${on ? 'Přestat hlídat slevu' : 'Hlídat slevu'}: ${name}`);
+    b.title = on ? 'Hlídám, kliknutím přestaneš' : 'Hlídat slevu a poslat oznámení';
+  });
+  document.querySelectorAll(`.item__watch[data-slug="${sel}"]`).forEach((b) => (b.textContent = on ? 'Hlídám slevu ✓' : 'Hlídat slevu'));
+}
+
+async function refreshAlertStatus() {
+  try {
+    alertsState.data = await api('/api/alerts');
+    updateAlertCount();
+  } catch { /* nevadí */ }
+}
+
+async function toggleWatch(slug) {
+  const on = !alertsState.watched.has(slug);
+  setBells(slug, on);
+  try {
+    await alertsApi(on ? 'POST' : 'DELETE', `/api/alerts/watch/${encodeURIComponent(slug)}`);
+    await refreshAlertStatus();
+    toast(on
+      ? (alertsState.data?.enabled ? 'Hlídám produkt, oznámení přijde, až bude ve slevě' : 'Hlídám produkt. Oznámení na pozadí zapneš v záložce Upozornění')
+      : 'Hlídání zrušeno');
+    if (state.view === 'alerts') loadAlerts();
+  } catch (e) {
+    setBells(slug, !on);
+    toast(`Nepodařilo se uložit: ${e.message}`);
+  }
+}
+
+async function loadAlerts() {
+  try {
+    alertsState.data = await api('/api/alerts?setting=1');
+    updateAlertCount();
+    renderAlerts();
+    if (!alertsState.shopList.length) {
+      const t = state.today ?? new Date().toISOString().slice(0, 10);
+      const { shops } = await api(`/api/shops?date=${t}&to=${addDays(t, 14)}`);
+      alertsState.shopList = shops;
+      renderAlertShops();
+    }
+  } catch (e) {
+    $('alList').innerHTML = `<div class="empty"><strong>Upozornění se nepodařilo načíst</strong>${esc(e.message)}</div>`;
+    checkAlive();
+  }
+}
+
+function renderAlerts() {
+  const d = alertsState.data;
+  const sw = $('alSwitch');
+  sw.setAttribute('aria-checked', String(d.enabled));
+  $('alState').textContent = d.enabled
+    ? `Zapnuto. Aplikace se po přihlášení do Windows sama spustí na pozadí a po každém stažení dat pošle oznámení o nových slevách.${d.lastRun ? ` Poslední kontrola: ${whenText(d.lastRun)}.` : ''}`
+    : 'Vypnuto. Pravidla se ukládají, ale oznámení nechodí. Po zapnutí se aplikace spustí sama po přihlášení do Windows.';
+
+  const warns = [];
+  if (!d.autostart.supported) warns.push('Spouštění po přihlášení funguje jen ve Windows, oznámení tedy přijdou jen když aplikace běží.');
+  else if (d.enabled && !d.autostart.installed) warns.push('Spouštění po přihlášení se nenašlo. Vypni oznámení a znovu je zapni.');
+  if (d.windowsSetting && d.windowsSetting !== 'Enabled') warns.push('Windows má oznámení pro Letáčkomat vypnutá. Zapni je v Nastavení, Systém, Oznámení.');
+  if (d.lastError) warns.push(`Poslední oznámení se nepodařilo odeslat: ${d.lastError}`);
+  $('alWarn').hidden = !warns.length;
+  $('alWarn').textContent = warns.join(' ');
+
+  $('alCount').textContent = d.rules.length ? String(d.rules.length) : '';
+  const list = $('alList');
+  if (!d.rules.length) {
+    list.innerHTML = '<div class="empty"><strong>Zatím nic nehlídáš</strong>Přidej slovo v názvu nahoře, nebo klikni na zvonek u produktu.</div>';
+    return;
+  }
+  list.replaceChildren(...d.rules.map(ruleCard));
+}
+
+function ruleCard(r) {
+  const el = document.createElement('article');
+  el.className = `rule${r.enabled ? '' : ' rule--off'}`;
+  const chips = [r.kind === 'keyword' ? 'Slovo v názvu' : 'Konkrétní produkt'];
+  if (r.minDiscount) chips.push(`sleva od ${r.minDiscount} %`);
+  if (r.maxPrice) chips.push(`do ${fmtPrice(r.maxPrice)} Kč`);
+  if (r.shops.length) chips.push(r.shops.map((s) => alertsState.shopList.find((x) => x.slug === s)?.name ?? knownShops.get(s)?.name ?? s).join(', '));
+  const m = r.matches;
+  const now = m.count
+    ? `Teď v akci: <strong>${m.count}</strong> · ${m.examples.slice(0, 2).map((e) => `${esc(e.name)} ${fmtPrice(e.priceSale)} Kč (${esc(e.shop)})`).join(', ')}${m.count > 2 ? ' …' : ''}`
+    : 'Teď nic v akci. Oznámení přijde, až se to objeví.';
+  el.innerHTML = `
+    <div class="rule__icon" aria-hidden="true">${r.kind === 'keyword' ? '🔎' : '📦'}</div>
+    <div class="rule__main">
+      <h3>${esc(r.label)}</h3>
+      <ul class="rule__chips">${chips.map((c) => `<li>${esc(c)}</li>`).join('')}</ul>
+      <p class="rule__now">${now}</p>
+    </div>
+    <button type="button" class="switch switch--sm" role="switch" aria-checked="${r.enabled}" aria-label="Hlídat: ${esc(r.label)}"><span class="switch__knob"></span></button>
+    <button type="button" class="item__del" aria-label="Smazat pravidlo: ${esc(r.label)}" title="Smazat pravidlo"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a1.5 1.5 0 0 0 1.5 1.4h7a1.5 1.5 0 0 0 1.5-1.4L18 7M9 7V4.5h6V7"/></svg></button>`;
+  el.querySelector('.switch').addEventListener('click', async () => {
+    try {
+      await alertsApi('PATCH', `/api/alerts/rules/${r.id}`, { enabled: !r.enabled });
+      loadAlerts();
+    } catch (e) { toast(`Nepodařilo se uložit: ${e.message}`); }
+  });
+  el.querySelector('.item__del').addEventListener('click', async () => {
+    try {
+      await alertsApi('DELETE', `/api/alerts/rules/${r.id}`);
+      if (r.kind === 'product') setBells(r.value, false);
+      await loadAlerts();
+      toast(`Pravidlo smazáno: ${r.label}`, {
+        label: 'Vrátit',
+        run: async () => {
+          await alertsApi('POST', '/api/alerts/rules', { kind: r.kind, value: r.kind === 'keyword' ? r.label : r.value, label: r.label, minDiscount: r.minDiscount, maxPrice: r.maxPrice, shops: r.shops });
+          if (r.kind === 'product') setBells(r.value, true);
+          loadAlerts();
+        },
+      });
+    } catch (e) { toast(`Nepodařilo se smazat: ${e.message}`); }
+  });
+  return el;
+}
+
+function renderAlertShops() {
+  const box = $('alShops');
+  box.replaceChildren(
+    ...alertsState.shopList.map((s) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'shop shop--sm';
+      b.setAttribute('aria-pressed', String(alertsState.shops.has(s.slug)));
+      b.textContent = s.name;
+      b.addEventListener('click', () => {
+        if (alertsState.shops.has(s.slug)) alertsState.shops.delete(s.slug);
+        else alertsState.shops.add(s.slug);
+        b.setAttribute('aria-pressed', String(alertsState.shops.has(s.slug)));
+        previewRule();
+      });
+      return b;
+    }),
+  );
+}
+
+/** Podmínky z formuláře; null, když ještě není co hlídat. */
+function formRule() {
+  const kind = alertsState.kind;
+  const text = $('alInput').value.trim();
+  if (kind === 'keyword' ? text.length < 2 : !alertsState.picked) return null;
+  return {
+    kind,
+    value: kind === 'keyword' ? text : alertsState.picked.slug,
+    label: kind === 'keyword' ? text : alertsState.picked.name,
+    minDiscount: $('alMin').value || null,
+    maxPrice: $('alMax').value || null,
+    shops: [...alertsState.shops],
+  };
+}
+
+let previewTimer;
+function previewRule() {
+  clearTimeout(previewTimer);
+  const rule = formRule();
+  $('alAdd').disabled = !rule;
+  if (!rule) { $('alPreview').textContent = ''; return; }
+  previewTimer = setTimeout(async () => {
+    const p = new URLSearchParams({ kind: rule.kind, value: rule.value });
+    if (rule.minDiscount) p.set('minDiscount', rule.minDiscount);
+    if (rule.maxPrice) p.set('maxPrice', rule.maxPrice);
+    if (rule.shops.length) p.set('shops', rule.shops.join(','));
+    try {
+      const r = await api(`/api/alerts/preview?${p}`);
+      $('alPreview').innerHTML = r.count
+        ? `Teď odpovídá <strong>${r.count}</strong> ${r.count === 1 ? 'akce' : r.count < 5 ? 'akce' : 'akcí'}: ${r.examples.slice(0, 3).map((e) => `${esc(e.name)} ${fmtPrice(e.priceSale)} Kč (${esc(e.shop)})`).join(', ')}${r.count > 3 ? ' …' : ''}`
+        : 'Teď nic neodpovídá. Oznámení přijde, až se to objeví v akci.';
+    } catch (e) {
+      $('alPreview').textContent = e.message;
+    }
+  }, 300);
+}
+
+let pickTimer;
+function searchProducts() {
+  clearTimeout(pickTimer);
+  const q = $('alInput').value.trim();
+  const box = $('alPick');
+  if (alertsState.kind !== 'product' || q.length < 2) { box.hidden = true; return; }
+  pickTimer = setTimeout(async () => {
+    try {
+      const { products } = await api(`/api/products?q=${encodeURIComponent(q)}`);
+      box.replaceChildren(
+        ...(products.length
+          ? products.map((p) => {
+              const li = document.createElement('li');
+              li.setAttribute('role', 'option');
+              const b = document.createElement('button');
+              b.type = 'button';
+              b.innerHTML = `${p.image ? `<img src="${esc(p.image)}" alt="" loading="lazy">` : '<span class="al-pick__ph">🛒</span>'}<span>${esc(p.name)}${p.quantity ? ` <small>${esc(p.quantity)}</small>` : ''}</span>`;
+              b.addEventListener('click', () => {
+                alertsState.picked = { slug: p.slug, name: p.name };
+                $('alInput').value = p.name;
+                box.hidden = true;
+                previewRule();
+              });
+              li.append(b);
+              return li;
+            })
+          : [Object.assign(document.createElement('li'), { className: 'al-pick__none', textContent: 'Nic takového jsem nenašel.' })]),
+      );
+      box.hidden = false;
+    } catch { box.hidden = true; }
+  }, 250);
+}
+
+function setKind(kind) {
+  alertsState.kind = kind;
+  alertsState.picked = null;
+  $('alInput').value = '';
+  $('alPick').hidden = true;
+  document.querySelectorAll('#alKind button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.kind === kind)));
+  const keyword = kind === 'keyword';
+  $('alInput').placeholder = keyword ? 'Např. Jägermeister' : 'Hledej produkt podle názvu';
+  $('alInput').setAttribute('aria-label', keyword ? 'Slovo v názvu' : 'Název produktu');
+  $('alKindHint').textContent = keyword
+    ? 'Oznámí každý produkt, který má slovo v názvu, třeba každé pití s názvem Jägermeister.'
+    : 'Oznámí přesně ten jeden produkt, až bude ve slevě. Začni psát název a vyber ho ze seznamu.';
+  previewRule();
+}
+
+$('alKind').addEventListener('click', (e) => { const b = e.target.closest('button[data-kind]'); if (b) setKind(b.dataset.kind); });
+$('alInput').addEventListener('input', () => {
+  if (alertsState.kind === 'product') alertsState.picked = null;
+  previewRule();
+  searchProducts();
+});
+$('alMax').addEventListener('input', previewRule);
+enhanceSelect($('alMin'), { small: true });
+$('alMin').addEventListener('change', previewRule);
+
+$('alForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const rule = formRule();
+  if (!rule) return;
+  try {
+    const created = await alertsApi('POST', '/api/alerts/rules', rule);
+    if (rule.kind === 'product') setBells(rule.value, true);
+    $('alInput').value = '';
+    $('alMax').value = '';
+    $('alMin').value = '';
+    $('alMin').dispatchEvent(new Event('sync'));
+    alertsState.picked = null;
+    alertsState.shops.clear();
+    renderAlertShops();
+    $('alPreview').textContent = '';
+    $('alAdd').disabled = true;
+    await loadAlerts();
+    toast(created.matches.count
+      ? `Pravidlo přidáno. Teď v akci: ${created.matches.count}, oznámení přijde u dalších nových akcí.`
+      : 'Pravidlo přidáno, oznámení přijde, až bude ve slevě.');
+  } catch (err) {
+    toast(`Pravidlo se nepodařilo přidat: ${err.message}`);
+  }
+});
+
+$('alSwitch').addEventListener('click', async () => {
+  const on = $('alSwitch').getAttribute('aria-checked') !== 'true';
+  $('alSwitch').disabled = true;
+  try {
+    await alertsApi('PUT', '/api/alerts/settings', { enabled: on });
+    await loadAlerts();
+    toast(on ? 'Oznámení zapnuta. Aplikace se po přihlášení do Windows spustí na pozadí.' : 'Oznámení vypnuta, spouštění po přihlášení zrušeno.');
+  } catch (e) {
+    toast(`Nepodařilo se změnit: ${e.message}`);
+  } finally {
+    $('alSwitch').disabled = false;
+  }
+});
+
+$('alTest').addEventListener('click', async () => {
+  try {
+    const r = await alertsApi('POST', '/api/alerts/test');
+    toast(r.ok ? 'Zkušební oznámení odesláno, mělo by se objevit vpravo dole' : `Oznámení se nepodařilo zobrazit: ${r.error ?? 'neznámá chyba'}`);
+    loadAlerts();
+  } catch (e) { toast(`Nepodařilo se odeslat: ${e.message}`); }
+});
+
+$('alRun').addEventListener('click', async () => {
+  if (!alertsState.data?.enabled) return toast('Nejdřív zapni oznámení na pozadí');
+  try {
+    const r = await alertsApi('POST', '/api/alerts/run');
+    toast(r.matches ? (r.sent ? `Odesláno oznámení o ${r.sent} nových akcích` : `Nová akce je, ale oznámení se nepodařilo odeslat: ${r.error ?? ''}`) : 'Žádné nové slevy u hlídaných produktů');
+    loadAlerts();
+  } catch (e) { toast(`Kontrola selhala: ${e.message}`); }
+});
 
 /* ——— server: vypnutí a znovupřipojení ——— */
 async function alive() {
