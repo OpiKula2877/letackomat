@@ -2,6 +2,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
+import { parseUnitPrice } from './units.js';
 
 export function openDb(file = process.env.DB_FILE ?? resolve('data', 'letackomat.db')) {
   if (file !== ':memory:') mkdirSync(dirname(file), { recursive: true });
@@ -69,7 +70,31 @@ export function openDb(file = process.env.DB_FILE ?? resolve('data', 'letackomat
     );
   `);
   migrateFavoritesToCart(db);
+  ensureUnitColumns(db);
   return db;
+}
+
+/** Cena za 1 kg / 1 l / 1 ks (pro porovnání): přidá sloupce a jednorázově dopočítá starší záznamy. */
+export function ensureUnitColumns(db) {
+  const cols = db.prepare('PRAGMA table_info(deals)').all().map((c) => c.name);
+  if (!cols.includes('unit_kind')) db.exec('ALTER TABLE deals ADD COLUMN unit_kind TEXT');
+  if (!cols.includes('unit_price')) db.exec('ALTER TABLE deals ADD COLUMN unit_price REAL');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_deals_unit ON deals(unit_kind, unit_price)');
+  if (getMeta(db, 'units_backfilled') === '1') return;
+
+  const upd = db.prepare('UPDATE deals SET unit_kind = ?, unit_price = ? WHERE id = ?');
+  db.exec('BEGIN');
+  try {
+    for (const r of db.prepare('SELECT id, price_per_unit FROM deals WHERE price_per_unit IS NOT NULL').all()) {
+      const u = parseUnitPrice(r.price_per_unit);
+      if (u) upd.run(u.kind, u.price, r.id);
+    }
+    db.exec('COMMIT');
+  } catch (e) {
+    db.exec('ROLLBACK');
+    throw e;
+  }
+  setMeta(db, 'units_backfilled', '1');
 }
 
 /** Jednorázově převede dřívější "oblíbené" na položky nákupního seznamu. */
@@ -105,13 +130,14 @@ export function makeWriter(db) {
   `);
   const deal = db.prepare(`
     INSERT INTO deals(id,shop_slug,product_id,product_slug,name,name_norm,quantity,note,category,
-      price_sale,price_orig,discount_pct,price_per_unit,valid_from,valid_to,image_url,source_url,leaflet_url,first_seen,last_seen)
+      price_sale,price_orig,discount_pct,price_per_unit,unit_kind,unit_price,valid_from,valid_to,image_url,source_url,leaflet_url,first_seen,last_seen)
     VALUES(@id,@shop_slug,@product_id,@product_slug,@name,@name_norm,@quantity,@note,@category,
-      @price_sale,@price_orig,@discount_pct,@price_per_unit,@valid_from,@valid_to,@image_url,@source_url,@leaflet_url,@seen,@seen)
+      @price_sale,@price_orig,@discount_pct,@price_per_unit,@unit_kind,@unit_price,@valid_from,@valid_to,@image_url,@source_url,@leaflet_url,@seen,@seen)
     ON CONFLICT(id) DO UPDATE SET
       name=excluded.name, name_norm=excluded.name_norm, quantity=excluded.quantity, note=excluded.note,
       category=excluded.category, price_sale=excluded.price_sale, price_orig=excluded.price_orig,
       discount_pct=excluded.discount_pct, price_per_unit=excluded.price_per_unit,
+      unit_kind=excluded.unit_kind, unit_price=excluded.unit_price,
       valid_from=COALESCE(excluded.valid_from, deals.valid_from),
       valid_to=COALESCE(excluded.valid_to, deals.valid_to),
       image_url=COALESCE(excluded.image_url, deals.image_url),
@@ -119,7 +145,11 @@ export function makeWriter(db) {
   `);
   return {
     shop: (s) => shop.run({ logo_url: null, ...s }),
-    deal: (d) => deal.run(d),
+    deal(d) {
+      // cena za 1 kg / 1 l / 1 ks se odvozuje z textu "13,95 Kč / 100 g"
+      const u = parseUnitPrice(d.price_per_unit);
+      return deal.run({ ...d, unit_kind: u?.kind ?? null, unit_price: u?.price ?? null });
+    },
     tx(fn) {
       db.exec('BEGIN');
       try {

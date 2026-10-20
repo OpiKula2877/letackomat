@@ -2,6 +2,7 @@
 import { CATEGORY_LABELS } from './categories.js';
 import { cartSlugs, registerCart } from './cart.js';
 import { getMeta } from './db.js';
+import { registerProduct } from './product.js';
 import { buildFilter, SORTS, splitCsv, toItem } from './query.js';
 import { isScraping, runScrape } from './scraper/run.js';
 import { addDays, isISODate, todayISO } from './util.js';
@@ -99,6 +100,7 @@ export function registerRoutes(app, db, { onShutdown } = {}) {
   });
 
   registerCart(app, db);
+  registerProduct(app, db);
 
   /** Vypnutí serveru (tlačítko Vypnout v aplikaci, end.bat). */
   app.post('/api/shutdown', async (req, reply) => {

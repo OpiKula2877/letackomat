@@ -1,7 +1,13 @@
 # Letáčkomat
 
-Akční ceny ze všech českých obchodů na jednom místě. Vyber den, obchody, hvězdičkuj produkty.
-Funguje jako web i jako instalovatelná appka (PWA). Obsahuje nákupní seznam se sekcemi.
+Akční ceny ze všech českých obchodů na jednom místě. Funguje jako web i jako instalovatelná appka (PWA).
+
+**Co umí**
+
+- akce platné v zvolený den nebo období od–do, výběr obchodů, hledání bez diakritiky, kategorie, minimální sleva
+- **porovnání cen**: u produktu ceny ve všech obchodech vedle sebe, přepočet na 1 kg / 1 l / 1 ks, nejlevnější varianta a historie cen
+- řazení podle ceny za jednotku (Nejlevnější za jednotku)
+- **nákupní seznam** se sekcemi, odškrtáváním a přepínačem Všechny / Jen v akci; položka zůstává, dokud ji nesmažeš
 
 ## Stažení a spuštění (Windows)
 
@@ -69,7 +75,8 @@ Na mobilu k appce přistupuj přes adresu počítače v síti (`HOST=0.0.0.0 npm
 
 | Endpoint | Popis |
 | --- | --- |
-| `GET /api/deals` | Akce platné v daný den. Parametry: `date=YYYY-MM-DD` (výchozí dnes), `to=YYYY-MM-DD` (volitelně konec období, vrátí akce platné alespoň jeden den v rozsahu), `shops=albert,lidl`, `q=šunka`, `category=maso`, `minDiscount=30`, `sort=discount\|price\|name\|shop`, `limit`, `offset` |
+| `GET /api/deals` | Akce platné v daný den. Parametry: `date=YYYY-MM-DD` (výchozí dnes), `to=YYYY-MM-DD` (volitelně konec období, vrátí akce platné alespoň jeden den v rozsahu), `shops=albert,lidl`, `q=šunka`, `category=maso`, `minDiscount=30`, `sort=discount\|price\|unit\|name\|shop`, `limit`, `offset` |
+| `GET /api/products/:slug?date=&to=` | Porovnání cen produktu: nabídky v obchodech v období (seřazené podle ceny za 1 kg / 1 l / 1 ks, s označením nejlevnější), historie cen z našich dat a statistiky |
 | `GET /api/shops?date=` | Obchody a počet akcí v daný den |
 | `GET /api/days?from=&count=14` | Počty akcí po dnech (pásek dnů) |
 | `GET /api/range` | Nejstarší a nejnovější známé datum |

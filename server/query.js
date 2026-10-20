@@ -65,6 +65,8 @@ export function buildFilter(query, { skip = [] } = {}) {
 export const SORTS = {
   discount: 'd.discount_pct IS NULL, d.discount_pct DESC, d.price_sale ASC',
   price: 'd.price_sale ASC',
+  // cena za 1 kg / 1 l / 1 ks; druhy jednotek se nemíchají, proto se řadí nejdřív podle druhu
+  unit: 'd.unit_price IS NULL, d.unit_kind, d.unit_price ASC',
   name: 'd.name_norm ASC',
   shop: 's.name ASC, d.name_norm ASC',
 };
@@ -85,6 +87,8 @@ export function toItem(r, inCartSlugs) {
     origApprox: r.price_orig != null,
     discountPct: r.discount_pct,
     pricePerUnit: r.price_per_unit,
+    unitKind: r.unit_kind ?? null,
+    unitPrice: r.unit_price ?? null,
     validFrom: r.valid_from,
     validTo: r.valid_to,
     image: /^https?:\/\//.test(r.image_url ?? '') ? r.image_url : null,

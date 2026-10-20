@@ -31,6 +31,8 @@
   --weekend: #c4182f;
 
   --range-bg: #ffec99;   /* pruh vybraného období v kalendáři (text na něm: --ink) */
+  /* barvy čar v grafu historie (kontrast vůči --surface ≥ 3:1) */
+  --c1: #1a6ed8; --c2: #d7263d; --c3: #1f7a4d; --c4: #b36b00; --c5: #7a3fb5; --c6: #0e7f8a;
   --scroll-track: rgba(21, 24, 26, 0.08);
   --scroll-thumb: #ffd83a;
   --scroll-edge: #15181a;
@@ -69,6 +71,7 @@
     --weekend: #ff8a9a;
 
     --range-bg: #4a4220;
+    --c1: #6aa6ff; --c2: #ff7185; --c3: #5fd196; --c4: #ffb454; --c5: #c39bff; --c6: #4fd1d1;
     --scroll-track: #1a1d1f;
     --scroll-thumb: #ffd83a;
     --scroll-edge: #1a1d1f;
@@ -545,6 +548,124 @@ a { color: inherit; }
   font-stretch: 85%;
 }
 
+/* ——— porovnání cen (dialog) ——— */
+.linkbtn {
+  border: 0;
+  background: none;
+  padding: 2px 0;
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.linkbtn:hover { color: var(--ink); }
+.deal__links { display: flex; flex-wrap: wrap; gap: 4px 10px; justify-content: flex-end; }
+.deal__links a { margin-left: 0; }
+.deal__unit--norm b { color: var(--ink); font-weight: 800; }
+.item__cmp { margin-top: 6px; }
+
+dialog.cmp {
+  width: min(720px, 94vw);
+  max-height: 92vh;
+  padding: 0;
+  border: 0;
+  border-radius: 24px;
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 30px 70px -20px rgba(0, 0, 0, 0.65);
+  overflow: hidden;
+}
+dialog.cmp::backdrop { background: rgba(21, 24, 26, 0.72); backdrop-filter: blur(3px); }
+.cmp__box { max-height: 92vh; overflow-y: auto; padding: 22px 24px 20px; }
+.cmp__loading { margin: 24px 0; color: var(--ink-soft); }
+.cmp__head { display: flex; align-items: center; gap: 16px; padding-right: 44px; margin-bottom: 14px; }
+.cmp__img { flex: none; width: 72px; height: 72px; border-radius: 14px; background: #fff; display: grid; place-items: center; overflow: hidden; }
+.cmp__img img { width: 100%; height: 100%; object-fit: contain; padding: 4px; }
+.cmp__img--none { color: #5f675f; font-size: 1.8rem; }
+.cmp__title { min-width: 0; }
+.cmp__title h2, .cmp__box > h2 { margin: 0; font-size: 1.5rem; font-weight: 900; font-stretch: 72%; line-height: 1.15; }
+.cmp__title p { margin: 2px 0 0; color: var(--ink-soft); font-size: 0.9rem; }
+.cmp__close {
+  position: absolute;
+  top: 14px; right: 14px;
+  width: 38px; height: 38px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 1rem;
+  display: grid; place-items: center;
+}
+.cmp__close:hover { background: var(--solid-bg); color: var(--solid-fg); border-color: var(--solid-bg); }
+.cmp__box h3 { margin: 18px 0 8px; font-size: 1rem; font-weight: 800; font-stretch: 85%; }
+.cmp__note, .cmp__empty { margin: 8px 0 0; font-size: 0.85rem; color: var(--ink-soft); }
+.cmp__empty { padding: 14px; border: 1px dashed var(--line); border-radius: 14px; }
+
+.offers { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.offer {
+  display: grid;
+  grid-template-columns: minmax(90px, 1.1fr) minmax(110px, 1fr) minmax(90px, 0.9fr) minmax(90px, 0.9fr) minmax(110px, 1.1fr);
+  gap: 2px 12px;
+  align-items: baseline;
+  padding: 9px 12px;
+  border-radius: 12px;
+  background: var(--paper);
+  font-weight: 600;
+  font-stretch: 92%;
+  font-size: 0.92rem;
+}
+.offer--best { background: var(--tag); color: var(--on-tag); }
+.offer__shop { font-weight: 800; }
+.offer__shop small { display: block; font-weight: 600; font-size: 0.78rem; opacity: 1; color: inherit; }
+.offer:not(.offer--best) .offer__shop small { color: var(--ink-soft); }
+.offer__price b { font-size: 1.25rem; font-weight: 900; font-stretch: 72%; }
+.offer__pct { font-style: normal; font-weight: 800; padding: 0 7px; border-radius: 999px; background: var(--sale-bg); color: var(--sale-fg); font-size: 0.8rem; }
+.offer__unit { font-variant-numeric: tabular-nums; }
+.offer__diff em { font-style: normal; font-weight: 900; padding: 1px 10px; border-radius: 999px; background: var(--on-tag); color: var(--tag); }
+.offer__valid { font-size: 0.84rem; }
+.offer--best .offer__valid.validity--soon { color: #8a0f20; }
+
+.stats { list-style: none; margin: 0 0 6px; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.stats li { display: grid; gap: 0; padding: 8px 14px; border-radius: 14px; background: var(--paper); min-width: 96px; }
+.stats span { font-size: 0.78rem; color: var(--ink-soft); font-weight: 600; }
+.stats b { font-size: 1.1rem; font-weight: 900; font-stretch: 75%; }
+.stats small { font-size: 0.76rem; color: var(--ink-soft); }
+
+.chart { display: block; width: 100%; height: auto; margin-top: 8px; }
+.chart__grid { stroke: var(--line); stroke-width: 1; stroke-dasharray: 3 4; }
+.chart__today { stroke: var(--ink-soft); stroke-width: 1.5; stroke-dasharray: 2 4; }
+.chart__txt { fill: var(--ink-soft); font-size: 12px; font-family: var(--font); }
+.legend { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 0.85rem; font-weight: 600; }
+.legend li { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 14px; height: 6px; border-radius: 999px; display: inline-block; }
+.legend__today i { height: 0; border-top: 2px dotted var(--ink-soft); border-radius: 0; }
+.cmp__table { margin-top: 10px; font-size: 0.88rem; }
+.cmp__table summary { cursor: pointer; font-weight: 700; color: var(--ink-soft); }
+.cmp__table table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+.cmp__table th, .cmp__table td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--line); }
+.cmp__foot { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; margin-top: 20px; padding-top: 14px; border-top: 1px solid var(--line); }
+.cmp__cart {
+  border: 0;
+  border-radius: 999px;
+  padding: 10px 20px;
+  background: var(--tag);
+  color: var(--on-tag);
+  font-weight: 800;
+  font-stretch: 88%;
+}
+.cmp__link { color: var(--ink-soft); font-weight: 600; font-size: 0.9rem; }
+
+@media (max-width: 560px) {
+  .cmp__box { padding: 18px 16px 16px; }
+  .offer { grid-template-columns: 1fr auto; }
+  .offer__shop { grid-column: 1; }
+  .offer__price { grid-column: 2; text-align: right; }
+  .offer__unit, .offer__diff, .offer__valid { grid-column: 1 / -1; }
+  .offer__diff:empty { display: none; }
+}
+
 /* ——— nákupní seznam ——— */
 .cart__sections { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .sec {
@@ -607,7 +728,40 @@ a { color: inherit; }
 .cart__btn--danger { color: var(--weekend); }
 
 .cart__head { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; margin: 18px 0 12px; min-height: 36px; }
-.cart__sum { margin: 0; font-weight: 700; font-stretch: 88%; color: var(--ink-soft); }
+.cart__sum { margin: 0; flex: 1 1 220px; font-weight: 700; font-stretch: 88%; color: var(--ink-soft); }
+
+/* přepínač Všechny / Jen v akci */
+.seg {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.seg button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  padding: 7px 14px;
+  border-radius: 999px;
+  font-weight: 700;
+  font-stretch: 88%;
+}
+.seg button[aria-pressed='true'] { background: var(--solid-bg); color: var(--solid-fg); }
+.seg__n {
+  min-width: 1.5em;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--paper);
+  color: var(--ink-soft);
+  font-size: 0.85em;
+  text-align: center;
+}
+.seg button[aria-pressed='true'] .seg__n { background: var(--solid-fg); color: var(--solid-bg); }
 .cart__sum strong { color: var(--ink); }
 
 .cart__list { display: grid; gap: 10px; }

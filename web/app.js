@@ -21,7 +21,7 @@ const state = {
   view: 'all', // 'all' = všechny akce, 'cart' = nákupní seznam
   offset: 0,
   cartSlugs: new Set(), // produkty v nákupním seznamu (pro označení karet)
-  cart: { sections: [], items: [], active: 'all', editor: null }, // active: 'all' | 'none' | id sekce
+  cart: { sections: [], items: [], active: 'all', editor: null, onlySale: false }, // active: 'all' | 'none' | id sekce
   health: null,
 };
 
@@ -30,11 +30,15 @@ try {
   if (Array.isArray(saved.shops)) state.shops = new Set(saved.shops);
   if (saved.sort) state.sort = saved.sort;
   if (saved.view === 'cart') state.view = 'cart';
+  if (saved.onlySale === true) state.cart.onlySale = true;
 } catch { /* localStorage nemusí být dostupné */ }
 
 function persist() {
   try {
-    localStorage.setItem('letackomat', JSON.stringify({ shops: [...state.shops], sort: state.sort, view: state.view }));
+    localStorage.setItem(
+      'letackomat',
+      JSON.stringify({ shops: [...state.shops], sort: state.sort, view: state.view, onlySale: state.cart.onlySale }),
+    );
   } catch { /* ignoruj */ }
 }
 
@@ -462,12 +466,13 @@ function card(d) {
       ${d.priceOrig ? `<span class="price__old">${fmtPrice(d.priceOrig)} Kč</span>` : ''}
       ${d.discountPct ? `<span class="price__pct">−${d.discountPct} %</span>` : ''}
     </div>
-    ${d.pricePerUnit ? `<p class="deal__unit">${esc(d.pricePerUnit)}</p>` : ''}
+    ${d.unitPrice != null ? `<p class="deal__unit deal__unit--norm"><b>${fmtPrice(d.unitPrice)} Kč</b> / ${unitText(d.unitKind)}</p>` : d.pricePerUnit ? `<p class="deal__unit">${esc(d.pricePerUnit)}</p>` : ''}
     <div class="deal__foot">
       <span class="validity ${v.soon ? 'validity--soon' : ''}">${v.text}</span>
-      <span class="deal__links">${d.leafletUrl ? `<a href="${esc(d.leafletUrl)}" target="_blank" rel="noopener">V letáku</a>` : ''}</span>
+      <span class="deal__links"><button type="button" class="linkbtn cmpbtn">Porovnat ceny</button>${d.leafletUrl ? `<a href="${esc(d.leafletUrl)}" target="_blank" rel="noopener">V letáku</a>` : ''}</span>
     </div>`;
   el.querySelector('.cartbtn').addEventListener('click', () => toggleCart(d));
+  el.querySelector('.cmpbtn').addEventListener('click', () => openCompare(d.productSlug, d.name));
   return el;
 }
 
@@ -556,12 +561,19 @@ function renderCart() {
   renderSectionTabs();
   renderSectionEditor();
 
-  const visible = c.items.filter((i) => c.active === 'all' || (c.active === 'none' ? i.sectionId == null : i.sectionId === c.active));
+  // položky aktivní sekce; přepínač "Jen v akci" je filtruje dál podle slev v zvoleném období
+  const inSection = c.items.filter((i) => c.active === 'all' || (c.active === 'none' ? i.sectionId == null : i.sectionId === c.active));
+  const saleCount = inSection.filter((i) => i.deals.length).length;
+  const visible = c.onlySale ? inSection.filter((i) => i.deals.length) : inSection;
+  $('segAll').textContent = inSection.length;
+  $('segSale').textContent = saleCount;
+  $('saleSeg').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', String((b.dataset.only === '1') === c.onlySale)));
+
   const open = visible.filter((i) => !i.checked);
   const onSale = open.filter((i) => i.deals.length);
   const total = onSale.reduce((sum, i) => sum + i.deals[0].priceSale, 0);
   $('cartSum').innerHTML = open.length
-    ? `<strong>${onSale.length}</strong> z ${open.length} ${open.length === 1 ? 'položky' : open.length < 5 ? 'položek' : 'položek'} je v akci${onSale.length ? ` · nejlevněji dohromady <strong>${fmtPrice(Math.round(total * 100) / 100)} Kč</strong>` : ''}`
+    ? `<strong>${onSale.length}</strong> z ${open.length} ${open.length === 1 ? 'položky' : 'položek'} je v akci${onSale.length ? ` · nejlevněji dohromady <strong>${fmtPrice(Math.round(total * 100) / 100)} Kč</strong>` : ''}`
     : '';
   $('clearChecked').hidden = !visible.some((i) => i.checked);
 
@@ -571,7 +583,9 @@ function renderCart() {
     return;
   }
   if (!visible.length) {
-    list.innerHTML = `<div class="empty"><strong>V téhle sekci nic není</strong>Produkt sem přesuneš výběrem sekce u položky.</div>`;
+    list.innerHTML = c.onlySale && inSection.length
+      ? `<div class="empty"><strong>V tomto období není nic z tvého seznamu v akci</strong>Přepni na Všechny, nebo zkus jiný den či období.</div>`
+      : `<div class="empty"><strong>V téhle sekci nic není</strong>Produkt sem přesuneš výběrem sekce u položky.</div>`;
     return;
   }
 
@@ -729,12 +743,14 @@ function cartRow(item) {
     <div class="item__main">
       <h3 class="item__name">${esc(item.name)}${item.quantity ? ` <small>${esc(item.quantity)}</small>` : ''}</h3>
       ${dealsHtml}
+      <button type="button" class="linkbtn item__cmp">Porovnat ceny a historii</button>
     </div>
     <div class="item__tools">
       <select class="item__sec" aria-label="Sekce pro ${esc(item.name)}">${options}</select>
       <button type="button" class="item__del" aria-label="Odebrat ze seznamu: ${esc(item.name)}" title="Odebrat ze seznamu"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a1.5 1.5 0 0 0 1.5 1.4h7a1.5 1.5 0 0 0 1.5-1.4L18 7M9 7V4.5h6V7"/></svg></button>
     </div>`;
 
+  el.querySelector('.item__cmp').addEventListener('click', () => openCompare(item.slug, item.name));
   el.querySelector('.dl__more')?.addEventListener('click', () => {
     el.querySelector('.dls').insertAdjacentHTML('beforeend', item.deals.slice(3).map((d) => dealLine(d, false)).join(''));
     el.querySelector('.dl--more').remove();
@@ -787,12 +803,150 @@ async function removeItem(item) {
   }
 }
 
+$('saleSeg').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-only]');
+  if (!b) return;
+  state.cart.onlySale = b.dataset.only === '1';
+  persist();
+  renderCart();
+});
+
 $('clearChecked').addEventListener('click', async () => {
   const res = await fetch('/api/cart/clear-checked', { method: 'POST' });
   const { removed } = await res.json();
   await loadCart();
   toast(`Smazáno odškrtnutých: ${removed}`);
 });
+
+/* ——— porovnání cen produktu ——— */
+const CHART_COLORS = ['--c1', '--c2', '--c3', '--c4', '--c5', '--c6'];
+const unitText = (kind) => ({ kg: 'kg', l: 'l', ks: 'ks' })[kind] ?? '';
+
+async function openCompare(slug, fallbackName = '') {
+  const dlg = $('cmp');
+  dlg.innerHTML = `<div class="cmp__box"><p class="cmp__loading">Načítám porovnání…</p></div>`;
+  if (!dlg.open) dlg.showModal();
+  try {
+    const data = await api(`/api/products/${encodeURIComponent(slug)}?${periodQuery()}`);
+    renderCompare(dlg, data);
+  } catch {
+    dlg.innerHTML = `<div class="cmp__box"><button type="button" class="cmp__close" aria-label="Zavřít">✕</button><h2 id="cmpTitle">${esc(fallbackName) || 'Porovnání cen'}</h2><p>Porovnání se nepodařilo načíst. Zkus to znovu.</p></div>`;
+    dlg.querySelector('.cmp__close').addEventListener('click', () => dlg.close());
+    checkAlive();
+  }
+}
+
+function renderCompare(dlg, p) {
+  const period = periodLabel();
+  const offerRow = (o) => {
+    const v = validity(o);
+    const unit = o.unitPrice != null ? `${fmtPrice(o.unitPrice)} Kč / ${unitText(o.unitKind)}` : '';
+    return `<li class="offer ${o.cheapest ? 'offer--best' : ''}">
+      <span class="offer__shop">${esc(o.shop.name)}${o.quantity ? `<small>${esc(o.quantity)}</small>` : ''}</span>
+      <span class="offer__price"><b>${fmtPrice(o.priceSale)}</b> Kč${o.discountPct ? ` <i class="offer__pct">−${o.discountPct} %</i>` : ''}</span>
+      <span class="offer__unit">${unit}</span>
+      <span class="offer__diff">${o.cheapest ? '<em>Nejlevnější</em>' : o.moreExpensivePct > 0 ? `o ${o.moreExpensivePct} % dražší` : ''}</span>
+      <span class="offer__valid ${v.soon ? 'validity--soon' : ''}">${v.text}</span>
+    </li>`;
+  };
+
+  const caption = p.offers.length === 0 ? ''
+    : p.offers.length === 1 ? 'V tomto období je v akci jen v jednom obchodě.'
+    : p.metric === 'unit' ? `Porovnáno podle ceny za 1 ${unitText(p.unitKind)}, takže různě velká balení jdou srovnat.`
+    : 'Balení jsou různá nebo bez ceny za jednotku, proto se porovnává cena za balení.';
+
+  const offersHtml = p.offers.length
+    ? `<ul class="offers">${p.offers.map(offerRow).join('')}</ul><p class="cmp__note">${caption}</p>`
+    : `<p class="cmp__empty">V období ${esc(period)} není v žádném obchodě v akci.${p.stats.lowestFrom ? ` Naposledy nejlevněji: ${fmtPrice(p.stats.min)} Kč${p.stats.basis === 'unit' ? ` / ${unitText(p.stats.unitKind)}` : ''} (${esc(p.stats.lowestShop)}).` : ''}</p>`;
+
+  dlg.innerHTML = `<div class="cmp__box">
+    <header class="cmp__head">
+      <div class="cmp__img ${p.image ? '' : 'cmp__img--none'}">${p.image ? `<img src="${esc(p.image)}" alt="">` : '🛒'}</div>
+      <div class="cmp__title">
+        <h2 id="cmpTitle">${esc(p.name)}</h2>
+        <p>${p.quantity ? `${esc(p.quantity)} · ` : ''}${esc(period)}</p>
+      </div>
+      <button type="button" class="cmp__close" aria-label="Zavřít">✕</button>
+    </header>
+    <section aria-labelledby="cmpOffers">
+      <h3 id="cmpOffers">Ceny v obchodech</h3>
+      ${offersHtml}
+    </section>
+    <section aria-labelledby="cmpHist">
+      <h3 id="cmpHist">Historie cen</h3>
+      ${historyHtml(p)}
+    </section>
+    <footer class="cmp__foot">
+      <button type="button" class="cmp__cart" aria-pressed="${p.inCart}">${p.inCart ? 'V nákupním seznamu ✓' : 'Přidat do nákupního seznamu'}</button>
+      <a class="cmp__link" href="${esc(p.url)}" target="_blank" rel="noopener">Otevřít na kupi.cz</a>
+    </footer>
+  </div>`;
+
+  dlg.querySelector('.cmp__close').addEventListener('click', () => dlg.close());
+  const cartBtn = dlg.querySelector('.cmp__cart');
+  cartBtn.addEventListener('click', async () => {
+    await toggleCart({ productSlug: p.slug });
+    const on = state.cartSlugs.has(p.slug);
+    cartBtn.setAttribute('aria-pressed', String(on));
+    cartBtn.textContent = on ? 'V nákupním seznamu ✓' : 'Přidat do nákupního seznamu';
+    if (state.view === 'cart') loadCart();
+  });
+}
+
+/** Historie jako vodorovné úseky ceny po dobu platnosti akce (krokový graf) + tabulka pro čtečky. */
+function historyHtml(p) {
+  const h = p.history;
+  if (!h.length) return '<p class="cmp__empty">Zatím žádná historie.</p>';
+
+  const shops = [...new Map(h.map((x) => [x.shop.slug, x.shop.name])).entries()];
+  const color = (slug) => `var(${CHART_COLORS[shops.findIndex(([s]) => s === slug) % CHART_COLORS.length]})`;
+  const day = (iso) => Date.parse(`${iso}T12:00:00Z`);
+  const t0 = Math.min(...h.map((x) => day(x.validFrom)));
+  const t1 = Math.max(...h.map((x) => day(x.validTo)), day(state.today));
+  // při různě velkých baleních se kreslí cena za 1 kg / 1 l / 1 ks (stejný základ jako statistiky ze serveru)
+  const byUnit = p.stats.basis === 'unit';
+  const val = (e) => (byUnit ? e.unitPrice : e.priceSale);
+  const suffix = byUnit ? ` / ${unitText(p.stats.unitKind)}` : '';
+  const lo = Math.min(...h.map(val));
+  const hi = Math.max(...h.map(val));
+  const W = 640, H = 200, L = 52, R = 14, T = 14, B = 30;
+  const x = (t) => L + (t1 === t0 ? (W - L - R) / 2 : ((t - t0) / (t1 - t0)) * (W - L - R));
+  const pad = (hi - lo) * 0.15 || hi * 0.1 || 1;
+  const yMin = Math.max(0, lo - pad), yMax = hi + pad;
+  const y = (v) => T + (1 - (v - yMin) / (yMax - yMin)) * (H - T - B);
+
+  const bars = h.map((e) => {
+    const xa = x(day(e.validFrom)), xb = Math.max(x(day(e.validTo)), xa + 6);
+    return `<line x1="${xa.toFixed(1)}" x2="${xb.toFixed(1)}" y1="${y(val(e)).toFixed(1)}" y2="${y(val(e)).toFixed(1)}" stroke="${color(e.shop.slug)}" stroke-width="6" stroke-linecap="round"><title>${esc(e.shop.name)}: ${fmtPrice(val(e))} Kč${suffix}, ${dm(e.validFrom)} – ${dm(e.validTo)}</title></line>`;
+  }).join('');
+  const tx = x(day(state.today));
+
+  const chart = `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Graf cen${suffix}: od ${fmtPrice(p.stats.min)} do ${fmtPrice(p.stats.max)} Kč">
+    <line class="chart__grid" x1="${L}" x2="${W - R}" y1="${y(hi).toFixed(1)}" y2="${y(hi).toFixed(1)}"/>
+    <line class="chart__grid" x1="${L}" x2="${W - R}" y1="${y(lo).toFixed(1)}" y2="${y(lo).toFixed(1)}"/>
+    <text class="chart__txt" x="${L - 8}" y="${(y(hi) + 4).toFixed(1)}" text-anchor="end">${fmtPrice(hi)}</text>
+    ${hi !== lo ? `<text class="chart__txt" x="${L - 8}" y="${(y(lo) + 4).toFixed(1)}" text-anchor="end">${fmtPrice(lo)}</text>` : ''}
+    <line class="chart__today" x1="${tx.toFixed(1)}" x2="${tx.toFixed(1)}" y1="${T}" y2="${H - B}"/>
+    ${bars}
+    <text class="chart__txt" x="${L}" y="${H - 8}">${dm(new Date(t0).toISOString().slice(0, 10))}</text>
+    <text class="chart__txt" x="${(W - R).toFixed(1)}" y="${H - 8}" text-anchor="end">${dm(new Date(t1).toISOString().slice(0, 10))}</text>
+  </svg>`;
+
+  const legend = `<ul class="legend">${shops.map(([slug, name]) => `<li><i style="background:${color(slug)}"></i>${esc(name)}</li>`).join('')}<li class="legend__today"><i></i>dnes</li></ul>`;
+  const s = p.stats;
+  const chips = `<ul class="stats">
+    <li><span>Nejnižší</span><b>${fmtPrice(s.min)} Kč${suffix}</b><small>${esc(s.lowestShop ?? '')}${s.lowestFrom ? `, ${dm(s.lowestFrom)}` : ''}</small></li>
+    <li><span>Medián</span><b>${fmtPrice(s.median)} Kč${suffix}</b></li>
+    <li><span>Nejvyšší</span><b>${fmtPrice(s.max)} Kč${suffix}</b></li>
+    <li><span>Záznamů</span><b>${s.count}</b></li>
+  </ul>`;
+  const rows = [...h].reverse().slice(0, 30).map((e) => `<tr><td>${esc(e.shop.name)}</td><td>${fmtPrice(e.priceSale)} Kč</td>${byUnit ? `<td>${fmtPrice(e.unitPrice)} Kč${suffix}</td>` : ''}<td>${dm(e.validFrom)} – ${dm(e.validTo)}</td></tr>`).join('');
+  return `${chips}${chart}${legend}
+    <p class="cmp__note">Historie je z našich dat od ${dm(s.since)} a s časem se prodlužuje.</p>
+    <details class="cmp__table"><summary>Zobrazit záznamy tabulkou</summary><table><thead><tr><th>Obchod</th><th>Cena balení</th>${byUnit ? `<th>Cena za 1 ${unitText(p.stats.unitKind)}</th>` : ''}<th>Platnost</th></tr></thead><tbody>${rows}</tbody></table></details>`;
+}
+
+$('cmp').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
 
 /* ——— načítání ——— */
 let reqId = 0;

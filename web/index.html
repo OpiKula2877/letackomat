@@ -70,6 +70,7 @@
         <select id="sort" aria-label="Řazení">
           <option value="discount">Největší sleva</option>
           <option value="price">Nejnižší cena</option>
+          <option value="unit">Nejlevnější za jednotku</option>
           <option value="name">Název A–Z</option>
           <option value="shop">Podle obchodu</option>
         </select>
@@ -84,12 +85,18 @@
       <div class="cart__sections" id="sections" role="tablist" aria-label="Sekce seznamu"></div>
       <div class="cart__editor" id="sectionEditor" hidden></div>
       <div class="cart__head">
+        <div class="seg" id="saleSeg" role="group" aria-label="Které položky zobrazit">
+          <button type="button" data-only="0" aria-pressed="true">Všechny <span class="seg__n" id="segAll">0</span></button>
+          <button type="button" data-only="1" aria-pressed="false">Jen v akci <span class="seg__n" id="segSale">0</span></button>
+        </div>
         <p class="cart__sum" id="cartSum" aria-live="polite"></p>
         <button type="button" class="cart__btn" id="clearChecked" hidden>Smazat odškrtnuté</button>
       </div>
       <div class="cart__list" id="cartList"></div>
     </section>
   </main>
+
+  <dialog class="cmp" id="cmp" aria-labelledby="cmpTitle"></dialog>
 
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
