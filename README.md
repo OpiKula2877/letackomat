@@ -132,3 +132,7 @@ web/      Frontend bez buildu + PWA (manifest, service worker, ikony)
 test/     Testy parseru, datumů a API (node:test)
 scripts/  Generátor ikon
 ```
+
+## Licence
+
+[MIT](LICENSE). Můžeš to volně používat, upravovat i šířit. Data o akcích patří kupi.cz a obchodům, viz sekce o zdroji dat výše.
