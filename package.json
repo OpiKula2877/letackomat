@@ -1,0 +1,26 @@
+{
+  "name": "letackomat",
+  "version": "1.0.0",
+  "description": "Akční letáky všech českých obchodů na jednom místě: výběr dne, nákupní seznam, webová aplikace (PWA)",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/OpiKula2877/letackomat.git"
+  },
+  "homepage": "https://github.com/OpiKula2877/letackomat#readme",
+  "scripts": {
+    "test": "node --test test/letackomat.test.js",
+    "scrape": "node server/scraper/run.js",
+    "start": "node server/index.js"
+  },
+  "dependencies": {
+    "@fastify/static": "^10.1.6",
+    "cheerio": "^1.2.0",
+    "fastify": "^5.12.7",
+    "node-cron": "^4.6.0"
+  }
+}

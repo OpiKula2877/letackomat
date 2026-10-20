@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="cs">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Letáčkomat</title>
+  <meta name="description" content="Akční ceny ze všech českých obchodů na jednom místě. Vyber den, obchody a oblíbené produkty.">
+  <meta name="theme-color" content="#ffd83a" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#16181a" media="(prefers-color-scheme: dark)">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="top__bar">
+      <h1 class="brand">Letáčkomat</h1>
+      <nav class="tabs" aria-label="Zobrazení">
+        <button class="tab" data-view="all" aria-pressed="true">Všechny akce</button>
+        <button class="tab" data-view="cart" aria-pressed="false">Nákupní seznam <span class="tab__n" id="cartCount">0</span></button>
+      </nav>
+      <button class="install" id="installBtn" hidden>Nainstalovat appku</button>
+      <button class="stopbtn" id="stopBtn" hidden>Vypnout server</button>
+    </div>
+
+    <section class="days" aria-label="Den">
+      <div class="days__strip" id="days" role="listbox" aria-label="Vyber den"></div>
+      <div class="days__pick">
+        <span id="dateLabel">Jiný den</span>
+        <button type="button" class="datebtn" id="dateBtn" aria-haspopup="dialog" aria-expanded="false" aria-labelledby="dateLabel dateBtn"></button>
+        <div class="cal" id="cal" role="dialog" aria-label="Kalendář" hidden>
+          <div class="cal__head">
+            <button type="button" class="cal__nav" id="calPrev" aria-label="Předchozí měsíc">‹</button>
+            <strong class="cal__title" id="calTitle" aria-live="polite"></strong>
+            <button type="button" class="cal__nav" id="calNext" aria-label="Další měsíc">›</button>
+          </div>
+          <div class="cal__dow" aria-hidden="true"><span>Po</span><span>Út</span><span>St</span><span>Čt</span><span>Pá</span><span>So</span><span>Ne</span></div>
+          <div class="cal__grid" id="calGrid"></div>
+          <div class="cal__presets" role="group" aria-label="Rychlý výběr">
+            <button type="button" data-preset="today">Dnes</button>
+            <button type="button" data-preset="tomorrow">Zítra</button>
+            <button type="button" data-preset="weekend">Víkend</button>
+            <button type="button" data-preset="week">Tento týden</button>
+            <button type="button" data-preset="nextweek">Příští týden</button>
+          </div>
+          <p class="cal__hint" id="calHint" aria-live="polite"></p>
+          <p class="cal__legend">tečka = ten den jsou akce</p>
+        </div>
+      </div>
+    </section>
+  </header>
+
+  <main class="layout">
+    <section class="filters" aria-label="Filtry">
+      <div class="shops" id="shops" role="group" aria-label="Obchody"></div>
+      <div class="filters__row">
+        <input class="search" id="q" type="search" placeholder="Hledej produkt, třeba šunka" autocomplete="off" aria-label="Hledat produkt">
+        <select id="category" aria-label="Kategorie"><option value="">Všechny kategorie</option></select>
+        <select id="minDiscount" aria-label="Minimální sleva">
+          <option value="0">Jakákoli sleva</option>
+          <option value="20">od 20 %</option>
+          <option value="30">od 30 %</option>
+          <option value="40">od 40 %</option>
+          <option value="50">od 50 %</option>
+        </select>
+        <select id="sort" aria-label="Řazení">
+          <option value="discount">Největší sleva</option>
+          <option value="price">Nejnižší cena</option>
+          <option value="name">Název A–Z</option>
+          <option value="shop">Podle obchodu</option>
+        </select>
+      </div>
+    </section>
+
+    <p class="summary" id="summary" aria-live="polite"></p>
+    <div class="grid" id="grid"></div>
+    <div class="more"><button id="moreBtn" hidden>Načíst další</button></div>
+
+    <section class="cart" id="cart" hidden aria-label="Nákupní seznam">
+      <div class="cart__sections" id="sections" role="tablist" aria-label="Sekce seznamu"></div>
+      <div class="cart__editor" id="sectionEditor" hidden></div>
+      <div class="cart__head">
+        <p class="cart__sum" id="cartSum" aria-live="polite"></p>
+        <button type="button" class="cart__btn" id="clearChecked" hidden>Smazat odškrtnuté</button>
+      </div>
+      <div class="cart__list" id="cartList"></div>
+    </section>
+  </main>
+
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+  <div class="down" id="down" role="alertdialog" aria-labelledby="downTitle" aria-describedby="downText" hidden>
+    <div class="down__box">
+      <h2 id="downTitle">Server neběží</h2>
+      <p id="downText">Letáčkomat potřebuje běžící server. Jakmile se spustí, stránka se obnoví sama.</p>
+      <div class="down__actions">
+        <a class="down__start" id="downStart" href="letackomat://start">Spustit server</a>
+        <button type="button" class="down__retry" id="downRetry">Zkusit znovu</button>
+      </div>
+      <p class="down__hint">Tlačítko Spustit server funguje po jednorázovém spuštění <b>install-start-button.bat</b>. Jinak server spusť dvojklikem na <b>start.bat</b>.</p>
+    </div>
+  </div>
+
+  <script src="/app.js" type="module"></script>
+</body>
+</html>

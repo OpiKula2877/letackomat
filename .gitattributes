@@ -1,0 +1,5 @@
+# Jednotné konce řádků. Dávkové soubory a VBS na Windows potřebují CRLF.
+* text=auto
+*.bat text eol=crlf
+*.vbs text eol=crlf
+*.png binary

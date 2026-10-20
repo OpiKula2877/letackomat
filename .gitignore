@@ -1,0 +1,23 @@
+# závislosti (obnoví je `npm install`, start.bat to udělá sám)
+node_modules/
+
+# data uživatele: databáze akcí, nákupní seznam, log a PID serveru
+data/
+
+# logy a dočasné soubory
+*.log
+npm-debug.log*
+*.tmp
+
+# soubory z prostředí a editorů
+.env
+.env.*
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+
+# sestavené balíčky pro release
+*.zip
+dist/
