@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openDb } from '../server/db.js';
 import { buildApp } from '../server/index.js';
+import { installId, rootDir } from '../server/install.js';
 import { compareVersions, createUpdateService, parseRelease, repoFromPackage } from '../server/update.js';
 import { applyUpdate, findSourceRoot, verifySource } from '../scripts/updater.js';
 
@@ -188,6 +189,17 @@ test('API aktualizace: stav, ochrana tlačítka a spuštění', async () => {
   await new Promise((r) => setTimeout(r, 700));
   assert.equal(stopped2, 0);
   await failing.close();
+});
+
+test('installId: stabilní otisk složky; health ho vrací, ale cestu ne', async () => {
+  assert.equal(installId('C:\\Apps\\Letackomat'), installId('c:\\apps\\letackomat')); // Windows nerozlišují velikost písmen
+  assert.notEqual(installId('C:\\Apps\\Letackomat'), installId('C:\\Jina\\Letackomat'));
+  assert.match(installId(), /^[0-9a-f]{10}$/);
+  const app = buildApp(openDb(':memory:'));
+  const h = (await app.inject({ url: '/api/health', headers: { host: 'localhost:3000' } })).json();
+  assert.equal(h.installId, installId());
+  assert.equal(JSON.stringify(h).includes(rootDir), false);
+  await app.close();
 });
 
 /* ——— updater: výměna souborů a vrácení zálohy (bez serveru a bez zipu) ——— */

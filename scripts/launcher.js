@@ -2,6 +2,7 @@
 //   node scripts/launcher.js start   – spustí server bez okna a otevře prohlížeč
 //   node scripts/launcher.js stop    – vypne server
 import { execFileSync, spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, rmSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -13,13 +14,33 @@ const pidFile = join(root, 'data', 'server.pid');
 const logFile = join(root, 'data', 'server.log');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-async function health() {
+/** Odpověď /api/health běžícího serveru, nebo null, když na portu nic neodpovídá. */
+async function healthInfo() {
   try {
     const res = await fetch(`${base}/api/health`, { signal: AbortSignal.timeout(1000) });
-    return res.ok;
+    return res.ok ? await res.json().catch(() => ({})) : null;
   } catch {
+    return null;
+  }
+}
+
+async function health() {
+  return (await healthInfo()) !== null;
+}
+
+/** Otisk této složky, stejný výpočet jako server/install.js. */
+const myInstallId = createHash('sha1').update(root.toLowerCase()).digest('hex').slice(0, 10);
+
+/** Požádá běžící server o vypnutí a počká, až přestane odpovídat. */
+async function requestShutdown() {
+  try {
+    const res = await fetch(`${base}/api/shutdown`, { method: 'POST', headers: { 'x-letackomat': '1' }, signal: AbortSignal.timeout(3000) });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  } catch (e) {
+    console.error(`Slušné vypnutí selhalo (${e.message}).`);
     return false;
   }
+  return waitFor(async () => !(await health()), 8000);
 }
 
 async function waitFor(predicate, ms) {
@@ -52,10 +73,19 @@ function openBrowser(url) {
 }
 
 async function start() {
-  if (await health()) {
+  const running = await healthInfo();
+  if (running && running.installId === myInstallId) {
     console.log(`Letáčkomat už běží na ${base.replace('127.0.0.1', 'localhost')}`);
     openBrowser(`http://localhost:${port}`);
     return 0;
+  }
+  if (running) {
+    // na portu běží Letáčkomat z jiné složky (nebo starší verze bez otisku); otevřel by se tedy ne ten, který chceš spustit
+    console.log('Na tomhle portu už běží Letáčkomat z jiné složky nebo ze starší verze. Vypínám ho a spouštím tuto kopii...');
+    if (!(await requestShutdown())) {
+      console.error('Nepodařilo se ho vypnout. Zavři ho (end.bat v jeho složce) a spusť start.bat znovu.');
+      return 1;
+    }
   }
   mkdirSync(dirname(logFile), { recursive: true });
   const log = openSync(logFile, 'a');
@@ -96,17 +126,7 @@ function isOurServer(pid) {
 
 async function stop() {
   if (await health()) {
-    try {
-      const res = await fetch(`${base}/api/shutdown`, {
-        method: 'POST',
-        headers: { 'x-letackomat': '1' },
-        signal: AbortSignal.timeout(3000),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    } catch (e) {
-      console.error(`Slušné vypnutí selhalo (${e.message}).`);
-    }
-    if (await waitFor(async () => !(await health()), 6000)) {
+    if (await requestShutdown()) {
       rmSync(pidFile, { force: true });
       console.log('Server je vypnutý.');
       return 0;

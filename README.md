@@ -35,6 +35,7 @@ Potřebuješ Node.js 22.13 nebo novější (testováno na 24).
 
 - `start.bat` spustí server na pozadí (bez okna) a otevře prohlížeč. Když už běží, jen otevře prohlížeč.
 - `end.bat` server vypne.
+- Když na stejném portu už běží Letáčkomat z jiné složky (třeba starší kopie), `start.bat` ho vypne a spustí tu kopii, ze které ho voláš.
 - Log serveru je v `data/server.log`.
 
 **Vypnutí z aplikace:** V záhlaví je tlačítko "Vypnout server" (dvojklik na potvrzení), vidí ho jen aplikace otevřená na tomtéž počítači.

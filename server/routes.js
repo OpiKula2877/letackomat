@@ -2,6 +2,7 @@
 import { CATEGORY_LABELS } from './categories.js';
 import { cartSlugs, registerCart } from './cart.js';
 import { getMeta } from './db.js';
+import { installId } from './install.js';
 import { registerProduct } from './product.js';
 import { buildFilter, SORTS, splitCsv, toItem } from './query.js';
 import { isScraping, runScrape } from './scraper/run.js';
@@ -19,10 +20,12 @@ export const isTrusted = (req) => isLocal(req) && req.headers['x-letackomat'] ==
 
 export function registerRoutes(app, db, { onShutdown, update } = {}) {
   const version = readPackage().version;
+  const id = installId();
 
   app.get('/api/health', async (req) => ({
     ok: true,
     version,
+    installId: id,
     today: todayISO(),
     lastScrape: getMeta(db, 'last_scrape'),
     scraping: isScraping(),
