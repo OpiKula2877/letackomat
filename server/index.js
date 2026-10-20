@@ -8,7 +8,10 @@ import { getMeta, openDb } from './db.js';
 import { registerRoutes } from './routes.js';
 import { runScrape } from './scraper/run.js';
 import { createUpdateService } from './update.js';
+import { rootDir } from './install.js';
+import { repairProtocolHandler } from './protocol.js';
 import { createAlerts } from './watch/alerts.js';
+import { repairAutostart } from './watch/autostart.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -52,6 +55,10 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const app = buildApp(db, { logger: { level: 'info' }, onShutdown: shutdown, update, alerts });
   const host = process.env.HOST ?? '127.0.0.1';
   await app.listen({ port, host });
+
+  // po přejmenování nebo přesunu složky opraví cesty v tlačítku Spustit server a ve skriptu po přihlášení
+  repairProtocolHandler(rootDir).then((r) => r.status === 'repaired' && app.log.info('letackomat://start přepsáno na tuto složku')).catch(() => {});
+  try { if (repairAutostart(rootDir) === 'repaired') app.log.info('skript po přihlášení přepsán na tuto složku'); } catch { /* nevadí */ }
 
   update.check().catch((e) => app.log.warn(`kontrola aktualizací: ${e.message}`)); // na pozadí, bez internetu nevadí
 

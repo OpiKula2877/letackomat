@@ -1,6 +1,6 @@
 // Spuštění aplikace na pozadí po přihlášení do Windows: jeden malý skript ve složce "Po spuštění".
 // Vytváří se jen na výslovné zapnutí oznámení v aplikaci a zapnutím/vypnutím se mazat.
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const FILE = 'Letackomat-na-pozadi.vbs';
@@ -36,4 +36,28 @@ export function enableAutostart(root) {
 
 export function disableAutostart() {
   rmSync(autostartFile(), { force: true });
+}
+
+/** Složka, na kterou ukazuje nainstalovaný skript (z řádku shell.CurrentDirectory). */
+export function installedRoot() {
+  try {
+    const raw = readFileSync(autostartFile());
+    const text = raw.subarray(0, 2).equals(Buffer.from([0xff, 0xfe])) ? raw.subarray(2).toString('utf16le') : raw.toString('utf8');
+    const m = /shell\.CurrentDirectory = "((?:[^"]|"")*)"/.exec(text);
+    return m ? m[1].replace(/""/g, '"') : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Po přejmenování nebo přesunu složky aplikace ukazuje skript po přihlášení do prázdna.
+ * Při startu serveru se proto přepíše na aktuální složku, ale jen když ta původní už neexistuje.
+ */
+export function repairAutostart(root) {
+  if (!autostartSupported() || !autostartInstalled()) return 'absent';
+  const old = installedRoot();
+  if (old && existsSync(join(old, 'scripts', 'launcher.js'))) return 'ok';
+  enableAutostart(root);
+  return 'repaired';
 }

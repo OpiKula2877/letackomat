@@ -45,6 +45,7 @@ Potřebuješ Node.js 22.13 nebo novější (testováno na 24).
 Vypnutá appka proto ukáže okno "Server neběží" s tlačítkem "Spustit server". To funguje po jednorázovém spuštění
 `install-start-button.bat`, které zaregistruje adresu `letackomat://start` (jen pro tvého uživatele, bez admin práv).
 Při prvním kliknutí se prohlížeč zeptá, jestli ji otevřít. Zrušit to jde přes `uninstall-start-button.bat`.
+Když složku s aplikací přejmenuješ nebo přesuneš, stačí jednou spustit `start.bat` z nového místa: cesta v tlačítku i ve skriptu po přihlášení (u oznámení na pozadí) se sama opraví, ale jen pokud původní složka už neexistuje.
 Jakmile server naběhne, stránka se obnoví sama.
 
 **Z příkazové řádky:**

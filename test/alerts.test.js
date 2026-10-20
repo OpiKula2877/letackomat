@@ -251,3 +251,73 @@ test('API upozornění: ochrana, pravidla, náhled, zvonek u produktu a zkušebn
   assert.equal((await call('GET', '/api/alerts', undefined, local)).body.rules.length, 1);
   await app.close();
 });
+
+/* ——— samoopravy po přejmenování nebo přesunu složky ——— */
+
+test('letackomat://start: cesta se opraví jen při chybějícím cíli a jen když registrace existuje', async () => {
+  const { expectedCommand, repairProtocolHandler, scriptPathOf } = await import('../server/protocol.js');
+  assert.equal(scriptPathOf('wscript.exe "C:\A B\scripts\start-hidden.vbs"'), 'C:\A B\scripts\start-hidden.vbs');
+  assert.equal(scriptPathOf('něco jiného'), null);
+
+  let stored = null;
+  const adds = [];
+  const run = async (args) => {
+    if (args[0] === 'query') {
+      return stored === null ? { ok: false, stdout: '' } : { ok: true, stdout: `\r\nHKEY_CURRENT_USER\...\command\r\n    (Výchozí)    REG_SZ    ${stored}\r\n` };
+    }
+    adds.push(args);
+    stored = args[4];
+    return { ok: true, stdout: '' };
+  };
+  const root = 'C:\Nova\letackomat';
+  const opts = (exists) => ({ run, platform: 'win32', exists: () => exists });
+
+  assert.deepEqual(await repairProtocolHandler(root, opts(false)), { status: 'absent' }); // registrace není, nic se nevytváří
+  assert.equal(adds.length, 0);
+
+  stored = 'wscript.exe "C:\Stara\scripts\start-hidden.vbs"';
+  assert.equal((await repairProtocolHandler(root, opts(true))).status, 'ok'); // původní cíl existuje (jiná instalace), nepřepisuje se
+  assert.equal(adds.length, 0);
+
+  const r = await repairProtocolHandler(root, opts(false)); // původní složka zmizela
+  assert.equal(r.status, 'repaired');
+  assert.equal(stored, expectedCommand(root));
+  assert.equal(adds.length, 1);
+
+  assert.equal((await repairProtocolHandler(root, { ...opts(false), platform: 'linux' })).status, 'unsupported');
+  stored = 'wscript.exe "C:\Stara\scripts\start-hidden.vbs"';
+  assert.equal((await repairProtocolHandler(root, { run: async (a) => (a[0] === 'query' ? run(a) : { ok: false, stdout: '' }), platform: 'win32', exists: () => false })).status, 'failed');
+});
+
+test('skript po přihlášení: po přesunu složky se přepíše, existující cíl se nechá', async () => {
+  const { autostartFile, enableAutostart, installedRoot, repairAutostart } = await import('../server/watch/autostart.js');
+  const dir = mkdtempSync(join(tmpdir(), 'letackomat-startup-'));
+  const fresh = mkdtempSync(join(tmpdir(), 'letackomat-root-'));
+  const { mkdirSync, writeFileSync } = await import('node:fs');
+  mkdirSync(join(fresh, 'scripts'));
+  writeFileSync(join(fresh, 'scripts', 'launcher.js'), '//');
+  process.env.LETACKOMAT_STARTUP_DIR = dir;
+  try {
+    assert.equal(repairAutostart(fresh), 'absent'); // nic nainstalováno, nic se nevytváří
+    assert.equal(existsSync(autostartFile()), false);
+
+    enableAutostart('C:\Stara složka\neexistuje');
+    assert.equal(installedRoot(), 'C:\Stara složka\neexistuje');
+    assert.equal(repairAutostart(fresh), 'repaired');
+    assert.equal(installedRoot(), fresh);
+    assert.equal(repairAutostart(fresh), 'ok'); // podruhé beze změny
+
+    // jiná existující instalace se nepřepisuje
+    const other = mkdtempSync(join(tmpdir(), 'letackomat-other-'));
+    mkdirSync(join(other, 'scripts'));
+    writeFileSync(join(other, 'scripts', 'launcher.js'), '//');
+    enableAutostart(other);
+    assert.equal(repairAutostart(fresh), 'ok');
+    assert.equal(installedRoot(), other);
+    rmSync(other, { recursive: true, force: true });
+  } finally {
+    delete process.env.LETACKOMAT_STARTUP_DIR;
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(fresh, { recursive: true, force: true });
+  }
+});
