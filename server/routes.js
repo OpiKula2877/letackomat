@@ -5,6 +5,7 @@ import { getMeta } from './db.js';
 import { registerProduct } from './product.js';
 import { buildFilter, SORTS, splitCsv, toItem } from './query.js';
 import { isScraping, runScrape } from './scraper/run.js';
+import { readPackage } from './update.js';
 import { addDays, isISODate, todayISO } from './util.js';
 
 const LOOPBACK = ['127.0.0.1', '::1', '::ffff:127.0.0.1'];
@@ -16,9 +17,12 @@ export const isLocal = (req) => LOOPBACK.includes(req.ip) && LOCAL_HOST.test(req
 /** Akce měnící stav serveru: jen lokálně a s vlastní hlavičkou (cizí web ji bez CORS nepošle). */
 export const isTrusted = (req) => isLocal(req) && req.headers['x-letackomat'] === '1';
 
-export function registerRoutes(app, db, { onShutdown } = {}) {
+export function registerRoutes(app, db, { onShutdown, update } = {}) {
+  const version = readPackage().version;
+
   app.get('/api/health', async (req) => ({
     ok: true,
+    version,
     today: todayISO(),
     lastScrape: getMeta(db, 'last_scrape'),
     scraping: isScraping(),
@@ -101,6 +105,27 @@ export function registerRoutes(app, db, { onShutdown } = {}) {
 
   registerCart(app, db);
   registerProduct(app, db);
+
+  /** Je k dispozici novější verze na GitHubu? (výsledek se cachuje, ?force=1 jen z tohoto počítače) */
+  app.get('/api/update', async (req) => {
+    if (!update) return { enabled: false, current: version, available: false };
+    await update.check({ force: req.query.force === '1' && isLocal(req) });
+    return update.status();
+  });
+
+  /** Stáhne novou verzi z GitHubu, vypne server a nechá updater vyměnit soubory a spustit ho znovu. */
+  app.post('/api/update/apply', async (req, reply) => {
+    if (!update || !onShutdown) return reply.code(501).send({ error: 'aktualizace není v tomto režimu dostupná' });
+    if (!isTrusted(req)) return reply.code(403).send({ error: 'jen z tohoto počítače' });
+    try {
+      const { version: to } = await update.startApply();
+      reply.code(202).send({ starting: true, version: to });
+      setTimeout(() => onShutdown(), 500); // updater čeká, až server skončí
+      return reply;
+    } catch (e) {
+      return reply.code(e.code ?? 500).send({ error: e.message });
+    }
+  });
 
   /** Vypnutí serveru (tlačítko Vypnout v aplikaci, end.bat). */
   app.post('/api/shutdown', async (req, reply) => {

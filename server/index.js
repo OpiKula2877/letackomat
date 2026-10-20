@@ -7,13 +7,14 @@ import { dirname, join, resolve } from 'node:path';
 import { getMeta, openDb } from './db.js';
 import { registerRoutes } from './routes.js';
 import { runScrape } from './scraper/run.js';
+import { createUpdateService } from './update.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
-export function buildApp(db, { logger = false, onShutdown } = {}) {
+export function buildApp(db, { logger = false, onShutdown, update } = {}) {
   // forceCloseConnections: otevřené spojení prohlížeče (keep-alive) nesmí vypnutí zablokovat
   const app = Fastify({ logger, forceCloseConnections: true });
-  registerRoutes(app, db, { onShutdown });
+  registerRoutes(app, db, { onShutdown, update });
   app.register(fastifyStatic, { root: resolve(here, '..', 'web'), maxAge: 0 });
   return app;
 }
@@ -33,10 +34,13 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     process.exit(0);
   }
 
-  const app = buildApp(db, { logger: { level: 'info' }, onShutdown: shutdown });
+  const update = createUpdateService(db);
+  const app = buildApp(db, { logger: { level: 'info' }, onShutdown: shutdown, update });
   const port = Number(process.env.PORT) || 3000;
   const host = process.env.HOST ?? '127.0.0.1';
   await app.listen({ port, host });
+
+  update.check().catch((e) => app.log.warn(`kontrola aktualizací: ${e.message}`)); // na pozadí, bez internetu nevadí
 
   // PID pro end.bat, kdyby se server nedal vypnout slušně
   mkdirSync(dirname(pidFile), { recursive: true });

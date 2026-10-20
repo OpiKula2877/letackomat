@@ -19,7 +19,9 @@ Akční ceny ze všech českých obchodů na jednom místě. Funguje jako web i 
 5. Otevře se prohlížeč na <http://localhost:3000>. Volitelně klikni na ikonu instalace v adresním řádku (nebo na tlačítko "Nainstalovat appku") a máš ji jako aplikaci.
 6. Vypnout ji jde tlačítkem "Vypnout server" v aplikaci, nebo dvojklikem na `end.bat`.
 
-**Aktualizace na novou verzi:** stáhni nový zip, rozbal ho a zkopíruj do něj složku `data` ze staré verze. Je v ní tvůj nákupní seznam.
+**Aktualizace:** od verze 1.2.0 se aplikace aktualizuje sama. Při každém spuštění zkontroluje GitHub, a když je tam novější verze, v záhlaví se objeví malé kulaté tlačítko se symbolem aktualizace a vyjede karta **Aktualizovat / Později**. Po kliknutí na Aktualizovat se nová verze stáhne z GitHubu (ověří se kontrolní součet), aplikace se restartuje a stránka se sama obnoví. Tvoje data a nákupní seznam zůstanou. Kdyby se nová verze nespustila, vrátí se automaticky ta původní. Kontrolu jde vypnout proměnnou `NO_UPDATE_CHECK=1`.
+
+Starší verze (1.0.0 a 1.1.0) tohle neumí. Stáhni jednou nový zip, rozbal ho a zkopíruj do něj složku `data` ze staré verze, od té doby už to jde z aplikace.
 
 **Mac a Linux:** `.bat` soubory jsou jen pro Windows. Nainstaluj Node.js, ve složce spusť `npm install` a `npm start` a otevři <http://localhost:3000>.
 
@@ -88,6 +90,8 @@ Na mobilu k appce přistupuj přes adresu počítače v síti (`HOST=0.0.0.0 npm
 | `GET /api/health` | Čas posledního stažení dat |
 | `POST /api/scrape?shops=` | Spustí stažení dat (jen z tohoto počítače, vyžaduje hlavičku `X-Letackomat: 1`) |
 | `POST /api/shutdown` | Vypne server (jen z tohoto počítače, vyžaduje hlavičku `X-Letackomat: 1`) |
+| `GET /api/update` | Je na GitHubu novější verze? (výsledek se na 6 hodin cachuje, `?force=1` jen z tohoto počítače) |
+| `POST /api/update/apply` | Stáhne novou verzi, vypne server a spustí aktualizaci (jen z tohoto počítače, vyžaduje hlavičku `X-Letackomat: 1`) |
 
 Příklady:
 
@@ -128,6 +132,7 @@ které sbírá letáky všech řetězců na jednom místě (`/slevy/<obchod>`, p
 | `DB_FILE` | `data/letackomat.db` | Soubor SQLite |
 | `SHOPS` | viz `DEFAULT_SHOPS` | Obchody ke stažení, např. `albert,lidl` |
 | `NO_SCRAPE` | | `1` vypne automatické stahování |
+| `NO_UPDATE_CHECK` | | `1` vypne kontrolu nových verzí |
 
 Seznam obchodů je v `DEFAULT_SHOPS` v [`server/scraper/kupi.js`](server/scraper/kupi.js). Slug obchodu najdeš v adrese `kupi.cz/slevy/<slug>`.
 
@@ -137,9 +142,29 @@ Seznam obchodů je v `DEFAULT_SHOPS` v [`server/scraper/kupi.js`](server/scraper
 server/   Fastify API, SQLite (node:sqlite), scraper kupi.cz
 web/      Frontend bez buildu + PWA (manifest, service worker, ikony)
 test/     Testy parseru, datumů a API (node:test)
-scripts/  Generátor ikon
+scripts/  Generátor ikon, spouštěč serveru (launcher), aktualizátor (updater)
 ```
 
 ## Licence
 
 [MIT](LICENSE). Můžeš to volně používat, upravovat i šířit. Data o akcích patří kupi.cz a obchodům, viz sekce o zdroji dat výše.
+
+## Vydání nové verze (pro autora)
+
+Aplikace nabízí aktualizaci, když je na GitHubu nejnovější release s vyšší verzí, než má nainstalovaná. Aby to fungovalo:
+
+1. Zvyš `version` v `package.json` (tag releasu musí být stejné číslo s předponou `v`, třeba `v1.2.1`) a commitni a pushni.
+2. Sestav zip tak, aby měl uvnitř jednu složku se stejným názvem jako soubor:
+
+```bash
+git archive --format=zip --prefix=letackomat-v1.2.1/ -o letackomat-v1.2.1.zip HEAD
+```
+
+3. Vytvoř release a přilož zip. Název souboru musí být `letackomat-vX.Y.Z.zip`:
+
+```bash
+gh release create v1.2.1 letackomat-v1.2.1.zip --title "Letáčkomat 1.2.1" --notes-file poznamky.md
+```
+
+V okně aktualizace se uživateli ukážou odrážky (řádky začínající `- `) z poznámek k vydání.
+Aktualizátor před výměnou zkontroluje, že zip obsahuje verzi, kterou ohlásil release, a při chybě vrátí původní soubory.

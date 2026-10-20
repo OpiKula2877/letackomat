@@ -1020,7 +1020,11 @@ async function init() {
     .catch(() => {});
   state.health = await api('/api/health').catch(() => null);
   if (!state.health) showDown();
-  else $('stopBtn').hidden = !state.health.canShutdown;
+  else {
+    $('stopBtn').hidden = !state.health.canShutdown;
+    document.querySelector('.brand').title = `Verze ${state.health.version}`;
+    initUpdate(); // na pozadí, nic nezdržuje
+  }
 
   setView(state.view);
 }
@@ -1085,6 +1089,140 @@ $('downRetry').addEventListener('click', async () => {
   if (await alive()) location.reload();
   else toast('Server pořád neběží');
 });
+
+/* ——— aktualizace aplikace z GitHubu ——— */
+const LATER_KEY = 'letackomat.updLater';
+const SEEN_KEY = 'letackomat.updSeen';
+const LATER_MS = 24 * 3600 * 1000;
+
+const readLater = () => {
+  try { return JSON.parse(localStorage.getItem(LATER_KEY) ?? 'null'); } catch { return null; }
+};
+const isSnoozed = (version) => {
+  const l = readLater();
+  return Boolean(l) && l.version === version && Date.now() < l.until;
+};
+
+async function healthInfo() {
+  try {
+    const res = await fetch('/api/health', { cache: 'no-store', signal: AbortSignal.timeout(1500) });
+    return res.ok ? await res.json() : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Poznámky k vydání: jen odrážky (bez návodů k instalaci), bez markdownu. */
+function releaseNotes(md) {
+  const plain = (s) => s.replace(/\*\*|`/g, '').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').trim();
+  const bullets = String(md ?? '').split('\n').filter((l) => /^\s*[-*] /.test(l)).map((l) => plain(l.replace(/^\s*[-*] /, ''))).filter(Boolean);
+  return bullets.slice(0, 6);
+}
+
+function renderUpd(st) {
+  const box = $('upd');
+  const notes = releaseNotes(st.notes);
+  const reason = {
+    git: 'Tahle instalace je z gitu, aktualizuj ji příkazem git pull.',
+    'no-asset': 'Nová verze zatím nemá stažitelný balíček.',
+  }[st.reason];
+  box.innerHTML = `
+    <h2 id="updTitle">Je dostupná verze ${esc(st.latest)}</h2>
+    <p class="upd__ver">Máš verzi ${esc(st.current)}</p>
+    ${notes.length ? `<ul class="upd__notes">${notes.map((n) => `<li>${esc(n)}</li>`).join('')}</ul>` : ''}
+    ${reason ? `<p class="upd__hint">${esc(reason)}</p>` : '<p class="upd__hint">Stáhne se z GitHubu a aplikace se sama restartuje. Tvoje data a nákupní seznam zůstanou.</p>'}
+    <div class="upd__actions">
+      ${st.canApply ? '<button type="button" class="upd__go">Aktualizovat</button>' : ''}
+      ${st.releaseUrl ? `<a class="upd__link" href="${esc(st.releaseUrl)}" target="_blank" rel="noopener">${st.canApply ? 'Podrobnosti' : 'Otevřít na GitHubu'}</a>` : ''}
+      <button type="button" class="upd__later">Později</button>
+    </div>`;
+  box.querySelector('.upd__later').addEventListener('click', () => {
+    try { localStorage.setItem(LATER_KEY, JSON.stringify({ version: st.latest, until: Date.now() + LATER_MS })); } catch { /* nevadí */ }
+    closeUpd(true);
+  });
+  box.querySelector('.upd__go')?.addEventListener('click', () => startUpdate(st));
+}
+
+function openUpd() {
+  const card = $('upd');
+  card.hidden = false;
+  $('updBtn').setAttribute('aria-expanded', 'true');
+  // karta se zarovná k tlačítku, ale nikdy nepřeteče přes okraj okna (i když je tlačítko vlevo na zalomeném řádku)
+  const wrap = $('updWrap').getBoundingClientRect();
+  const width = card.getBoundingClientRect().width;
+  const left = Math.min(Math.max(wrap.right - width, 16), innerWidth - width - 16);
+  card.style.left = `${left - wrap.left}px`;
+  card.style.right = 'auto';
+}
+function closeUpd(refocus = false) {
+  if ($('upd').hidden) return;
+  $('upd').hidden = true;
+  $('updBtn').setAttribute('aria-expanded', 'false');
+  if (refocus) $('updBtn').focus();
+}
+$('updBtn').addEventListener('click', () => ($('upd').hidden ? openUpd() : closeUpd()));
+document.addEventListener('click', (e) => { if (!$('upd').hidden && !e.target.closest('.updwrap')) closeUpd(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeUpd(true); });
+
+function showBusy(title, text) {
+  $('busyTitle').textContent = title;
+  $('busyText').textContent = text;
+  $('busy').hidden = false;
+}
+
+async function startUpdate(st) {
+  closeUpd();
+  showBusy(`Aktualizuji na verzi ${st.latest}`, 'Stahuji novou verzi z GitHubu…');
+  try {
+    const res = await fetch('/api/update/apply', { method: 'POST', headers: { 'x-letackomat': '1' } });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error ?? `chyba ${res.status}`);
+  } catch (e) {
+    $('busy').hidden = true;
+    toast(`Aktualizace se nepodařila: ${e.message}`);
+    return;
+  }
+  $('busyText').textContent = 'Aplikace se restartuje. Po dokončení se sama obnoví, nezavírej ji.';
+  // server se vypne a updater ho po výměně souborů spustí znovu; po návratu se stránka obnoví
+  let wentDown = false;
+  const t0 = Date.now();
+  const timer = setInterval(async () => {
+    const h = await healthInfo();
+    if (!h) wentDown = true;
+    else if (wentDown || h.version === st.latest) {
+      clearInterval(timer);
+      location.reload();
+    } else if (Date.now() - t0 > 90_000) {
+      clearInterval(timer);
+      $('busy').hidden = true;
+      toast('Aktualizace trvá nezvykle dlouho. Zkus stránku obnovit.');
+    }
+  }, 1500);
+}
+
+function showUpdateResult(r) {
+  if (!r?.at) return;
+  let seen = null;
+  try { seen = localStorage.getItem(SEEN_KEY); } catch { /* nevadí */ }
+  if (seen === r.at) return;
+  try { localStorage.setItem(SEEN_KEY, r.at); } catch { /* nevadí */ }
+  toast(r.ok ? `Aplikace je aktualizovaná na verzi ${r.to}` : `Aktualizace na ${r.to} se nepodařila (${r.error}). Běží původní verze ${r.from}.`);
+}
+
+async function initUpdate() {
+  let st;
+  try { st = await api('/api/update'); } catch { return; }
+  showUpdateResult(st.lastResult);
+  if (!st.enabled || !st.available) return;
+  $('updWrap').hidden = false;
+  $('updBtn').title = `Je dostupná aktualizace ${st.latest}`;
+  $('updBtn').setAttribute('aria-label', `Je dostupná aktualizace ${st.latest}`);
+  renderUpd(st);
+  // při každém spuštění aplikace jednou vyjede karta, pokud uživatel neklikl na Později
+  let shown = false;
+  try { shown = sessionStorage.getItem('letackomat.updShown') === '1'; sessionStorage.setItem('letackomat.updShown', '1'); } catch { /* nevadí */ }
+  if (!shown && !isSnoozed(st.latest)) openUpd();
+}
 
 /* ——— PWA ——— */
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
