@@ -2,7 +2,7 @@
 import { isLocal, isTrusted } from '../local.js';
 import { todayISO } from '../util.js';
 import {
-  countMatches, createRule, deleteRule, findProductRule, listRules, matchesFor, normalizeRule, updateRule,
+  countMatches, createRule, deleteRule, findProductRule, getRule, listRules, matchesFor, normalizeRule, updateRule,
 } from './rules.js';
 
 const example = (d) => ({
@@ -50,6 +50,14 @@ export function registerAlerts(app, db, alerts) {
     return reply.code(created ? 201 : 200).send(withMatches(rule));
   }));
 
+  /** Všechny akce, které pravidlu teď odpovídají (rozbalení pravidla v aplikaci). */
+  app.get('/api/alerts/rules/:id/matches', handler(false, async (req) => {
+    const rule = getRule(db, Number(req.params.id));
+    if (!rule) throw Object.assign(new Error('Pravidlo neexistuje.'), { code: 404 });
+    const items = matchesFor(db, rule, todayISO(), { limit: 200 });
+    return { rule: { id: rule.id, label: rule.label }, total: countMatches(db, rule, todayISO()), items };
+  }));
+
   app.patch('/api/alerts/rules/:id', handler(true, async (req) => withMatches(updateRule(db, Number(req.params.id), req.body ?? {}, todayISO()))));
 
   app.delete('/api/alerts/rules/:id', handler(true, async (req) => {
@@ -81,5 +89,5 @@ export function registerAlerts(app, db, alerts) {
     return { ok: Boolean(res.ok), setting: res.setting ?? null, error: res.error ?? null };
   }));
 
-  app.post('/api/alerts/run', handler(true, async () => alerts.run()));
+  app.post('/api/alerts/run', handler(true, async () => alerts.check()));
 }

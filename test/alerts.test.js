@@ -176,7 +176,7 @@ test('hlídač: oznámí jen při zapnutí, jen nové akce a při selhání to z
     assert.equal(r.sent, 1);
     assert.equal(sent.length, 1);
     assert.equal(sent[0].title, 'Pivo A je ve slevě');
-    assert.equal(sent[0].url, 'http://localhost:3000/');
+    assert.equal(sent[0].url, 'http://localhost:3000/#alerts/1'); // jedno pravidlo: rovnou rozbalí jeho akce
 
     assert.equal((await alerts.run()).matches, 0); // podruhé už nic
 

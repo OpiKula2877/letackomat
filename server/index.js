@@ -11,6 +11,8 @@ import { createUpdateService } from './update.js';
 import { rootDir } from './install.js';
 import { repairProtocolHandler } from './protocol.js';
 import { createAlerts } from './watch/alerts.js';
+import { quickRefresh } from './watch/quick.js';
+import { createWatcher } from './watch/watcher.js';
 import { repairAutostart } from './watch/autostart.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -51,7 +53,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
 
   const port = Number(process.env.PORT) || 3000;
   const update = createUpdateService(db);
-  const alerts = createAlerts(db, { port });
+  const alerts = createAlerts(db, { port, refresh: () => quickRefresh(db) });
   const app = buildApp(db, { logger: { level: 'info' }, onShutdown: shutdown, update, alerts });
   const host = process.env.HOST ?? '127.0.0.1';
   await app.listen({ port, host });
@@ -70,7 +72,10 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
 
   // upozornění: po každém stažení dat a při startu (po delším vypnutí PC doběhne zameškané)
   const checkAlerts = () => alerts.run().then((r) => r.matches && app.log.info(`upozornění: ${r.sent}/${r.matches} odesláno`)).catch((e) => app.log.error(e));
-  if (process.env.NO_ALERTS !== '1') setTimeout(checkAlerts, 20_000);
+  // rychlá kontrola hlídaných pravidel hned po startu, každých 30 minut a po probuzení počítače (bez čekání na stažení všech obchodů)
+  if (process.env.NO_ALERTS !== '1') {
+    createWatcher({ alerts, quick: () => quickRefresh(db, { log: (m) => app.log.warn(m) }), log: (m) => app.log.info(m) }).start();
+  }
 
   if (process.env.NO_SCRAPE !== '1') {
     const scrape = () => runScrape(db, undefined, (m) => app.log.info(m)).then(checkAlerts).catch((e) => app.log.error(e));

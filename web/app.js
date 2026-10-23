@@ -1011,6 +1011,16 @@ function setView(view) {
   if (view !== 'alerts') renderDays();
 }
 
+/** Přečte #alerts nebo #alerts/ID z adresy, adresu vyčistí a vrátí true, když se má otevřít záložka Upozornění. */
+function consumeAlertsHash() {
+  const m = /^#alerts(?:\/(\d+))?$/.exec(location.hash);
+  if (!m || $('alertsTab').hidden) return false;
+  if (m[1]) alertsState.focusRule = Number(m[1]);
+  history.replaceState(null, '', location.pathname + location.search);
+  return true;
+}
+window.addEventListener('hashchange', () => { if (consumeAlertsHash()) setView('alerts'); });
+
 async function init() {
   const range = await api('/api/range').catch(() => null);
   state.today = range?.today ?? new Date().toISOString().slice(0, 10);
@@ -1037,6 +1047,8 @@ async function init() {
     await initAlerts(); // rychlé; potřebuje se vědět, jestli se má ukázat záložka a zvonky
   }
 
+  // kliknutí na Windows oznámení otevře aplikaci s #alerts (nebo #alerts/ID jednoho pravidla)
+  if (consumeAlertsHash()) state.view = 'alerts';
   setView(state.view);
 }
 
@@ -1058,7 +1070,11 @@ $('moreBtn').addEventListener('click', () => load(false));
 document.querySelectorAll('.tab').forEach((t) => t.addEventListener('click', () => setView(t.dataset.view)));
 
 /* ——— upozornění: hlídač slev s oznámením ve Windows ——— */
-const alertsState = { data: null, available: true, watched: new Set(), kind: 'keyword', picked: null, shops: new Set(), shopList: [] };
+const alertsState = { data: null, available: true, watched: new Set(), kind: 'keyword', picked: null, shops: new Set(), shopList: [], expanded: new Set(), focusRule: null };
+
+/** Jednoduché jednobarevné ikony pravidel (barvu dává CSS). */
+const RULE_ICON_KEYWORD = '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V4h9l8.6 8.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="8.5" r="1.4"/></svg>';
+const RULE_ICON_PRODUCT = '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="m3 8 9 5 9-5M12 13v8"/></svg>';
 async function alertsApi(method, path, body) {
   // content-type jen s tělem; prázdné tělo s JSON hlavičkou by server odmítl jako Bad Request
   const headers = body === undefined ? { 'x-letackomat': '1' } : { 'content-type': 'application/json', 'x-letackomat': '1' };
@@ -1176,19 +1192,55 @@ function ruleCard(r) {
   if (r.minDiscount) chips.push(`sleva od ${r.minDiscount} %`);
   if (r.maxPrice) chips.push(`do ${fmtPrice(r.maxPrice)} Kč`);
   if (r.shops.length) chips.push(r.shops.map((s) => alertsState.shopList.find((x) => x.slug === s)?.name ?? knownShops.get(s)?.name ?? s).join(', '));
-  const m = r.matches;
-  const now = m.count
-    ? `Teď v akci: <strong>${m.count}</strong> · ${m.examples.slice(0, 2).map((e) => `${esc(e.name)} ${fmtPrice(e.priceSale)} Kč (${esc(e.shop)})`).join(', ')}${m.count > 2 ? ' …' : ''}`
-    : 'Teď nic v akci. Oznámení přijde, až se to objeví.';
+  const count = r.matches.count;
+  chips.push(count ? `teď ${count} v akci` : 'teď nic v akci');
+  const chevron = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
   el.innerHTML = `
-    <div class="rule__icon" aria-hidden="true">${r.kind === 'keyword' ? '🔎' : '📦'}</div>
+    <div class="rule__icon" aria-hidden="true">${r.kind === 'keyword' ? RULE_ICON_KEYWORD : RULE_ICON_PRODUCT}</div>
     <div class="rule__main">
       <h3>${esc(r.label)}</h3>
-      <ul class="rule__chips">${chips.map((c) => `<li>${esc(c)}</li>`).join('')}</ul>
-      <p class="rule__now">${now}</p>
+      <ul class="rule__chips">${chips.map((c, i) => `<li${i === chips.length - 1 ? ` class="${count ? 'chip--live' : ''}"` : ''}>${esc(c)}</li>`).join('')}</ul>
     </div>
+    <button type="button" class="rule__toggle" aria-expanded="false" aria-controls="rule-body-${r.id}" aria-label="Zobrazit akce pravidla ${esc(r.label)} (${count})" title="${count ? 'Zobrazit všechny akce' : 'Teď nic v akci. Oznámení přijde, až se to objeví.'}"${count ? '' : ' disabled'}>${chevron}</button>
     <button type="button" class="switch switch--sm" role="switch" aria-checked="${r.enabled}" aria-label="Hlídat: ${esc(r.label)}"><span class="switch__knob"></span></button>
     <button type="button" class="item__del" aria-label="Smazat pravidlo: ${esc(r.label)}" title="Smazat pravidlo"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a1.5 1.5 0 0 0 1.5 1.4h7a1.5 1.5 0 0 0 1.5-1.4L18 7M9 7V4.5h6V7"/></svg></button>`;
+  // rozbalení: všechny akce, které pravidlu teď odpovídají (stejné karty jako v seznamu akcí)
+  const body = document.createElement('div');
+  body.className = 'rule__body';
+  body.id = `rule-body-${r.id}`;
+  body.hidden = true;
+  el.append(body);
+  const toggle = el.querySelector('.rule__toggle');
+  const setOpen = async (open) => {
+    toggle.setAttribute('aria-expanded', String(open));
+    el.classList.toggle('rule--open', open);
+    body.hidden = !open;
+    if (open) alertsState.expanded.add(r.id);
+    else alertsState.expanded.delete(r.id);
+    if (!open || body.dataset.loaded === '1') return;
+    body.innerHTML = '<p class="rule__loading">Načítám akce…</p>';
+    try {
+      const { items, total } = await api(`/api/alerts/rules/${r.id}/matches`);
+      body.dataset.loaded = '1';
+      body.replaceChildren(
+        ...(items.length
+          ? [Object.assign(document.createElement('div'), { className: 'grid' }), ...(total > items.length ? [Object.assign(document.createElement('p'), { className: 'rule__loading', textContent: `Zobrazeno ${items.length} z ${total}.` })] : [])]
+          : [Object.assign(document.createElement('p'), { className: 'rule__loading', textContent: 'Teď nic v akci.' })]),
+      );
+      items.forEach((d) => body.querySelector('.grid')?.append(card(d)));
+    } catch (e) {
+      body.innerHTML = `<p class="rule__loading">Akce se nepodařilo načíst: ${esc(e.message)}</p>`;
+    }
+  };
+  toggle.addEventListener('click', () => setOpen(toggle.getAttribute('aria-expanded') !== 'true'));
+  if (count && alertsState.expanded.has(r.id)) setOpen(true);
+  if (count && alertsState.focusRule === r.id) {
+    alertsState.focusRule = null;
+    alertsState.expanded.add(r.id);
+    setOpen(true);
+    requestAnimationFrame(() => el.scrollIntoView({ block: 'start', behavior: 'smooth' }));
+  }
+
   el.querySelector('.switch').addEventListener('click', async () => {
     try {
       await alertsApi('PATCH', `/api/alerts/rules/${r.id}`, { enabled: !r.enabled });

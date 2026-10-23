@@ -36,11 +36,12 @@ export function buildDigest(pairs) {
       : `${products} ${plural(products, 'hlídaný produkt', 'hlídané produkty', 'hlídaných produktů')} ve slevě`;
   const lines = groups.slice(0, 2).map(describe);
   if (groups.length > 2) lines[1] = `${lines[1]} …a další (${groups.length - 2})`;
-  return { title, lines };
+  // jedno pravidlo = kliknutí otevře Upozornění a rovnou rozbalí jeho akce
+  return { title, lines, ruleId: groups.length === 1 ? groups[0].rule.id : null };
 }
 
-export function createAlerts(db, { port = 3000, notify = showToast, setting = toastSetting, root = rootDir, today = todayISO } = {}) {
-  const url = () => `http://localhost:${port}/`;
+export function createAlerts(db, { port = 3000, notify = showToast, setting = toastSetting, root = rootDir, today = todayISO, refresh = async () => ({}) } = {}) {
+  const url = (hash = '') => `http://localhost:${port}/${hash}`;
   const enabled = () => getMeta(db, 'alerts_enabled') === '1';
   let running = false;
 
@@ -51,7 +52,8 @@ export function createAlerts(db, { port = 3000, notify = showToast, setting = to
       const pairs = pendingMatches(db, today());
       setMeta(db, 'alerts_last_run', new Date().toISOString());
       if (!pairs.length) return { sent: 0, matches: 0 };
-      const res = await notify({ ...buildDigest(pairs), url: url() });
+      const digest = buildDigest(pairs);
+      const res = await notify({ title: digest.title, lines: digest.lines, url: url(digest.ruleId ? `#alerts/${digest.ruleId}` : '#alerts') });
       if (res.ok) {
         markNotified(db, pairs); // jen když se oznámení opravdu odeslalo, jinak se zkusí příště
         setMeta(db, 'alerts_last_sent', new Date().toISOString());
@@ -89,8 +91,14 @@ export function createAlerts(db, { port = 3000, notify = showToast, setting = to
     notify({
       title: 'Letáčkomat: zkušební oznámení',
       lines: ['Takhle budou vypadat oznámení o slevách.', 'Kliknutím se otevře aplikace.'],
-      url: url(),
+      url: url('#alerts'),
     });
 
-  return { run, setEnabled, status, test, enabled };
+  /** Obnoví data hlídaných pravidel a hned vyhodnotí (tlačítko Zkontrolovat teď). */
+  async function check() {
+    await refresh();
+    return run();
+  }
+
+  return { run, check, setEnabled, status, test, enabled };
 }

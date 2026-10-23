@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { getMeta, setMeta } from './db.js';
 
 const defaultRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const CHECK_TTL_MS = 6 * 3600 * 1000; // GitHub API bez přihlášení má limit 60 dotazů za hodinu
+const CHECK_TTL_MS = 15 * 60 * 1000; // GitHub API bez přihlášení má limit 60 dotazů za hodinu, 15 minut stačí a nová verze se ukáže hned při otevření
 const RETRY_AFTER_ERROR_MS = 10 * 60 * 1000;
 const MAX_ZIP_BYTES = 100 * 1024 * 1024;
 

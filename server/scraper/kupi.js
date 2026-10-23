@@ -33,7 +33,11 @@ const text = ($el) => $el.text().replace(/ /g, ' ').replace(/\s+/g, ' ').trim()
  * Z HTML jedné stránky výpisu vytáhne slevy.
  * @returns {{deals: object[], unknownValidity: number}}
  */
-export function parseListing(html, shopSlug, today = todayISO()) {
+/**
+ * @param {{ fallbackProduct?: {name: string, slug: string, image?: string|null} }} [opts]
+ *   fallbackProduct: pro stránku jednoho produktu (/sleva/<slug>), kde chybí karty .product--wrap
+ */
+export function parseListing(html, shopSlug, today = todayISO(), opts = {}) {
   const $ = cheerio.load(html);
 
   // produkty: id -> {name, slug, quantity, image}
@@ -64,7 +68,7 @@ export function parseListing(html, shopSlug, today = todayISO()) {
     seen.add(id);
 
     const productId = $r.attr('data-product');
-    const product = products.get(productId);
+    const product = products.get(productId) ?? (opts.fallbackProduct && { quantity: null, image: null, ...opts.fallbackProduct });
     if (!product?.name) return;
 
     const priceSale = parseCzNumber(text($r.find('.discount_price_value').first()));
@@ -115,7 +119,7 @@ export function parseListing(html, shopSlug, today = todayISO()) {
   return { deals, unknownValidity };
 }
 
-async function fetchHtml(url, { retries = 3 } = {}) {
+export async function fetchHtml(url, { retries = 3 } = {}) {
   let lastErr;
   for (let i = 0; i < retries; i++) {
     try {
@@ -159,3 +163,23 @@ export async function scrapeShop(slug, { delayMs = 800, maxPages = 400, onPage }
   }
   return { deals: [...all.values()], unknownValidity };
 }
+
+/** Stránka jednoho produktu (/sleva/<slug>): všechny aktuální akce napříč obchody v jednom požadavku. */
+export function parseProductPage(html, slug, today = todayISO()) {
+  const $ = cheerio.load(html);
+  const name = text($('h1').first());
+  if (!name) return { deals: [], unknownValidity: 0 };
+  let image = null;
+  $('script[type="application/ld+json"]').each((_, el) => {
+    try {
+      const ld = JSON.parse($(el).html() ?? '{}');
+      const img = Array.isArray(ld.image) ? ld.image[0] : ld.image;
+      if (ld['@type'] === 'Product' && String(img ?? '').startsWith('http')) image = img;
+    } catch { /* poškozený JSON-LD se ignoruje */ }
+  });
+  return parseListing(html, slug, today, { fallbackProduct: { name, slug, image } });
+}
+
+/** Výsledky hledání (/hledej?f=slovo), jen první stránka (další stránky robots.txt zakazuje). */
+export const searchUrl = (words) => `${BASE}/hledej?f=${encodeURIComponent(words)}`;
+export const productUrl = (slug) => `${BASE}/sleva/${encodeURIComponent(slug)}`;

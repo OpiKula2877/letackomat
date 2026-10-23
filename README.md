@@ -93,10 +93,11 @@ Na mobilu k appce přistupuj přes adresu počítače v síti (`HOST=0.0.0.0 npm
 | `GET /api/health` | Čas posledního stažení dat |
 | `POST /api/scrape?shops=` | Spustí stažení dat (jen z tohoto počítače, vyžaduje hlavičku `X-Letackomat: 1`) |
 | `POST /api/shutdown` | Vypne server (jen z tohoto počítače, vyžaduje hlavičku `X-Letackomat: 1`) |
-| `GET /api/update` | Je na GitHubu novější verze? (výsledek se na 6 hodin cachuje, `?force=1` jen z tohoto počítače) |
+| `GET /api/update` | Je na GitHubu novější verze? (výsledek se na 15 minut cachuje, `?force=1` jen z tohoto počítače) |
 | `GET /api/alerts`, `PUT /api/alerts/settings` | Stav upozornění a zapnutí / vypnutí oznámení na pozadí (jen z tohoto počítače) |
 | `GET/POST /api/alerts/rules`, `PATCH/DELETE /api/alerts/rules/:id` | Pravidla hlídače: `kind` (`keyword` / `product`), `value`, `minDiscount`, `maxPrice`, `shops`, `enabled` |
 | `GET /api/alerts/preview` | Co by pravidlo teď chytilo, bez uložení |
+| `GET /api/alerts/rules/:id/matches` | Všechny akce, které pravidlu teď odpovídají (rozbalení pravidla v aplikaci) |
 | `POST/DELETE /api/alerts/watch/:slug` | Zvonek u produktu: hlídat / přestat hlídat |
 | `POST /api/alerts/test`, `POST /api/alerts/run` | Zkušební oznámení; okamžitá kontrola pravidel |
 | `GET /api/products?q=` | Hledání produktů podle názvu (výběr produktu k hlídání) |
@@ -126,9 +127,10 @@ V záložce **Upozornění** přidáš pravidla a zapneš přepínač **Oznámen
 Jak to funguje:
 
 - Po zapnutí přepínače se do složky Po spuštění ve Windows (`shell:startup`) uloží malý skript `Letackomat-na-pozadi.vbs`, který po přihlášení spustí aplikaci skrytě na pozadí. Vypnutím přepínače se smaže.
-- Po každém stažení dat (6:00, 14:00 a při startu, když jsou data starší než 20 hodin) se vyhodnotí pravidla. Když se PC dlouho nepoužíval, zameškané slevy přijdou při dalším startu v jednom souhrnném oznámení.
+- **Rychlá kontrola:** hlídaná slova a produkty se zjišťují přímo na kupi.cz (jeden dotaz na pravidlo, asi 1 až 2 sekundy), bez čekání na stažení všech obchodů. Probíhá hned po startu aplikace (oznámení přijde zhruba do 10 sekund), pak každých 30 minut a hned po probuzení počítače ze spánku. Pokud po startu ještě není připojení k internetu, zkusí to za 15 sekund znovu.
+- Úplné stažení všech obchodů běží navíc (6:00, 14:00 a při startu, když jsou data starší než 20 hodin) a po něm se pravidla vyhodnotí znovu. Zameškané slevy po dlouhém vypnutí PC přijdou v jednom souhrnném oznámení.
 - Oznámí se akce platná dnes nebo začínající do 3 dnů, každá jednou. Akce, které jsou ve slevě už při vytvoření pravidla, se neoznamují (uvidíš je u pravidla), oznámení chodí u nových.
-- Oznámení se zobrazí jako běžné Windows oznámení pod názvem Letáčkomat, kliknutím se otevře aplikace. Při prvním oznámení se ve Windows zaregistruje název aplikace (klíč v `HKCUSoftwareClassesAppUserModelIdLetackomat`, bez admin práv, smazat ho jde ručně).
+- Oznámení se zobrazí jako běžné Windows oznámení pod názvem Letáčkomat. Kliknutím se otevře záložka Upozornění (když oznámení patří jednomu pravidlu, rovnou se jeho akce rozbalí). U každého pravidla je šipka, která rozbalí všechny akce, které mu teď odpovídají. Při prvním oznámení se ve Windows zaregistruje název aplikace (klíč v `HKCU\Software\Classes\AppUserModelId\Letackomat`, bez admin práv, smazat ho jde ručně).
 - Tlačítko **Poslat zkušební oznámení** ukáže, jak oznámení vypadá. Když se neukáže, zkontroluj ve Windows Nastavení, Systém, Oznámení, že nejsou vypnutá, a že není zapnutý režim Soustředění.
 - Upozornění jsou jen na počítači, kde aplikace běží (z mobilu v síti se záložka nezobrazí).
 
