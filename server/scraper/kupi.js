@@ -132,7 +132,7 @@ export async function fetchHtml(url, { retries = 3 } = {}) {
       return await res.text();
     } catch (e) {
       lastErr = e;
-      await sleep(1500 * (i + 1));
+      if (i < retries - 1) await sleep(1500 * (i + 1));
     }
   }
   throw new Error(`Stažení ${url} selhalo: ${lastErr?.message}`);
@@ -141,13 +141,21 @@ export async function fetchHtml(url, { retries = 3 } = {}) {
 /**
  * Projde všechny stránky jednoho obchodu. Končí na prázdné stránce
  * nebo když se stránka opakuje (kupi.cz vrací poslední stránku dokola).
+ * Když stahování uprostřed selže (výpadek sítě), vrátí už stažené stránky a v `error` důvod;
+ * selže-li hned první stránka, chybu vyhodí.
  */
-export async function scrapeShop(slug, { delayMs = 800, maxPages = 400, onPage } = {}) {
+export async function scrapeShop(slug, { delayMs = 800, maxPages = 400, retries, onPage } = {}) {
   const all = new Map();
   let unknownValidity = 0;
   let prevSig = '';
   for (let page = 1; page <= maxPages; page++) {
-    const html = await fetchHtml(`${BASE}/slevy/${slug}?page=${page}`);
+    let html;
+    try {
+      html = await fetchHtml(`${BASE}/slevy/${slug}?page=${page}`, { retries });
+    } catch (e) {
+      if (!all.size) throw e;
+      return { deals: [...all.values()], unknownValidity, error: e.message };
+    }
     if (!html) break;
     const { deals, unknownValidity: u } = parseListing(html, slug);
     if (!deals.length) break;

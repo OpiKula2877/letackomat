@@ -6,7 +6,7 @@ import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { getMeta, openDb } from './db.js';
 import { registerRoutes } from './routes.js';
-import { runScrape } from './scraper/run.js';
+import { runScrapeWithRetry } from './scraper/run.js';
 import { createUpdateService } from './update.js';
 import { rootDir } from './install.js';
 import { dataDir } from './paths.js';
@@ -87,9 +87,11 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   }
 
   if (process.env.NO_SCRAPE !== '1') {
-    const scrape = () => runScrape(db, undefined, (m) => app.log.info(m)).then(checkAlerts).catch((e) => app.log.error(e));
+    // neúspěšné obchody (výpadek sítě, probouzení počítače) se po 10 minutách zkusí znovu
+    const scrape = () => runScrapeWithRetry(db, { log: (m) => app.log.info(m) }).then(checkAlerts).catch((e) => app.log.error(e));
     cron.schedule('0 6,14 * * *', scrape, { timezone: 'Europe/Prague' });
     const last = getMeta(db, 'last_scrape');
-    if (!last || Date.now() - Date.parse(last) > 20 * 3600 * 1000) scrape();
+    const noDeals = !db.prepare('SELECT 1 FROM deals LIMIT 1').get();
+    if (!last || noDeals || Date.now() - Date.parse(last) > 20 * 3600 * 1000) scrape();
   }
 }
