@@ -12,17 +12,31 @@ Akční ceny ze všech českých obchodů na jednom místě. Funguje jako web i 
 
 ## Stažení a spuštění (Windows)
 
+### Instalátor (doporučeno)
+
+Od verze 1.4.1 se Letáčkomat instaluje instalátorem. Nepotřebuješ nic jiného: Node.js je v instalátoru přibalený.
+
+1. Otevři [Releases](https://github.com/OpiKula2877/letackomat/releases/latest) a stáhni `Letackomat-Setup-X.Y.Z.exe`.
+2. Spusť ho. Instalátor nabídne složku (výchozí `C:\Program Files\Letackomat`, vyžaduje potvrzení správcem) nebo volbu **jen pro mě** bez správce (`%LocalAppData%\Programs\Letackomat`).
+3. Volitelně zaškrtni zástupce na ploše a tlačítko Spustit server v aplikaci (registrace adresy `letackomat://`).
+4. Po dokončení se aplikace spustí a otevře se prohlížeč na <http://localhost:3000>. Při prvním spuštění se stáhnou data o akcích, což trvá několik minut. Dál ji najdeš ve Start menu: **Letáčkomat** (spustí a otevře), **Vypnout Letáčkomat**, **Odinstalovat Letáčkomat** (také v Nastavení, Aplikace).
+
+Instalátor zatím není podepsaný certifikátem vydavatele, takže Windows (SmartScreen) ukáže "Neznámý vydavatel". Klikni na **Další informace** a **Přesto spustit**.
+
+**Data** (nákupní seznam, pravidla hlídače, stažené akce) jsou mimo složku aplikace v `%LocalAppData%\Letackomat`. Aktualizace ani odinstalace je proto nesmažou (odinstalace se zeptá, jestli je smazat, výchozí je ponechat). Když máš starší instalaci ze zipu a po přihlášení se u ní spouští oznámení na pozadí, nebo funguje tlačítko Spustit server, převezme se její databáze sama při prvním spuštění nainstalované aplikace. Původní složka se nemění a můžeš ji pak smazat.
+
+**Aktualizace:** aplikace při každém spuštění zkontroluje GitHub, a když je tam novější verze, v záhlaví se objeví malé kulaté tlačítko a vyjede karta **Aktualizovat / Později**. Po kliknutí se stáhne nový instalátor (ověří se kontrolní součet SHA-256), tiše se spustí a aplikace naběhne znovu v nové verzi. Když je aplikace v `C:\Program Files`, Windows při každé aktualizaci zobrazí okno správce, které potvrď. Kdyby ses rozhodl okno zrušit, aplikace dál běží ve staré verzi. Instalace "jen pro mě" se aktualizuje bez dotazů. Kontrolu jde vypnout proměnnou `NO_UPDATE_CHECK=1`.
+
+### Přenosný zip (bez instalace)
+
 1. Nainstaluj [Node.js](https://nodejs.org/) (verze LTS, minimálně 22.13). Stačí potvrzovat výchozí volby.
-2. Otevři [Releases](https://github.com/OpiKula2877/letackomat/releases/latest) a stáhni `letackomat-vX.Y.Z.zip`.
-3. Zip **rozbal** (pravé tlačítko, Extrahovat vše) do libovolné složky, třeba do Dokumentů. Ze zipu to nespouštěj.
-4. Dvojklikem spusť `start.bat`. Při prvním spuštění se stáhnou závislosti (potřebuje internet) a pak data o akcích, což trvá několik minut.
-   Když Windows ukáže "Počítač byl chráněn", klikni na Další informace a Přesto spustit.
-5. Otevře se prohlížeč na <http://localhost:3000>. Volitelně klikni na ikonu instalace v adresním řádku (nebo na tlačítko "Nainstalovat appku") a máš ji jako aplikaci.
-6. Vypnout ji jde tlačítkem "Vypnout server" v aplikaci, nebo dvojklikem na `end.bat`.
+2. Z [Releases](https://github.com/OpiKula2877/letackomat/releases/latest) stáhni `letackomat-vX.Y.Z.zip` a **rozbal** ho (pravé tlačítko, Extrahovat vše) do libovolné složky, třeba do Dokumentů. Ze zipu to nespouštěj.
+3. Dvojklikem spusť `start.bat`. Při prvním spuštění se stáhnou závislosti (potřebuje internet) a pak data o akcích.
+4. Otevře se prohlížeč na <http://localhost:3000>. Vypnout ji jde tlačítkem "Vypnout server" v aplikaci, nebo dvojklikem na `end.bat`.
 
-**Aktualizace:** od verze 1.2.0 se aplikace aktualizuje sama. Při každém spuštění zkontroluje GitHub, a když je tam novější verze, v záhlaví se objeví malé kulaté tlačítko se symbolem aktualizace a vyjede karta **Aktualizovat / Později**. Po kliknutí na Aktualizovat se nová verze stáhne z GitHubu (ověří se kontrolní součet), aplikace se restartuje a stránka se sama obnoví. Tvoje data a nákupní seznam zůstanou. Kdyby se nová verze nespustila, vrátí se automaticky ta původní. Kontrolu jde vypnout proměnnou `NO_UPDATE_CHECK=1`.
+Data jsou tady ve složce `data` vedle aplikace. Zip se aktualizuje tlačítkem v aplikaci stejně jako dřív (stáhne se zip, vymění se soubory, v případě chyby se vrátí původní). Aplikaci ze zipu a z instalátoru nemíchej: instalátor je novější cesta, zip zůstává pro ty, kdo instalaci nechtějí.
 
-Starší verze (1.0.0 a 1.1.0) tohle neumí. Stáhni jednou nový zip, rozbal ho a zkopíruj do něj složku `data` ze staré verze, od té doby už to jde z aplikace.
+Starší verze (1.0.0 a 1.1.0) aktualizovat neumí. Stáhni jednou nový instalátor, zbytek jde pak z aplikace.
 
 **Mac a Linux:** `.bat` soubory jsou jen pro Windows. Nainstaluj Node.js, ve složce spusť `npm install` a `npm start` a otevři <http://localhost:3000>.
 
@@ -157,7 +171,8 @@ které sbírá letáky všech řetězců na jednom místě (`/slevy/<obchod>`, p
 | --- | --- | --- |
 | `PORT` | `3000` | Port serveru |
 | `HOST` | `127.0.0.1` | Adresa, na které server poslouchá |
-| `DB_FILE` | `data/letackomat.db` | Soubor SQLite |
+| `LETACKOMAT_DATA` | `data/` (zip) nebo `%LocalAppData%\Letackomat` (instalátor) | Složka s databází, logem a daty aktualizace |
+| `DB_FILE` | `<data>/letackomat.db` | Soubor SQLite |
 | `SHOPS` | viz `DEFAULT_SHOPS` | Obchody ke stažení, např. `albert,lidl` |
 | `NO_SCRAPE` | | `1` vypne automatické stahování |
 | `NO_UPDATE_CHECK` | | `1` vypne kontrolu nových verzí |
@@ -170,8 +185,9 @@ Seznam obchodů je v `DEFAULT_SHOPS` v [`server/scraper/kupi.js`](server/scraper
 ```
 server/   Fastify API, SQLite (node:sqlite), scraper kupi.cz
 web/      Frontend bez buildu + PWA (manifest, service worker, ikony)
-test/     Testy parseru, datumů a API (node:test)
-scripts/  Generátor ikon, spouštěč serveru (launcher), aktualizátor (updater)
+test/     Testy parseru, datumů, API, aktualizací a instalátoru (node:test)
+scripts/  Generátor ikon, spouštěč serveru (launcher), aktualizátor zipu (updater), sestavení instalátoru
+installer/ Skript Inno Setup (letackomat.iss)
 ```
 
 ## Licence
@@ -180,20 +196,28 @@ scripts/  Generátor ikon, spouštěč serveru (launcher), aktualizátor (update
 
 ## Vydání nové verze (pro autora)
 
-Aplikace nabízí aktualizaci, když je na GitHubu nejnovější release s vyšší verzí, než má nainstalovaná. Aby to fungovalo:
+Aplikace nabízí aktualizaci, když je na GitHubu nejnovější release s vyšší verzí, než má nainstalovaná. Aby to fungovalo, musí release obsahovat **instalátor** (pro aplikace z instalátoru) i **zip** (pro přenosnou verzi a pro starší verze do 1.4.0):
 
-1. Zvyš `version` v `package.json` (tag releasu musí být stejné číslo s předponou `v`, třeba `v1.2.1`) a commitni a pushni.
-2. Sestav zip tak, aby měl uvnitř jednu složku se stejným názvem jako soubor:
+1. Zvyš `version` v `package.json` (tag releasu musí být stejné číslo s předponou `v`, třeba `v1.4.2`), spusť `npm install --package-lock-only --ignore-scripts` a commitni a pushni.
+2. Sestav instalátor. Potřebuje [Inno Setup 6](https://jrsoftware.org/isinfo.php) (`winget install JRSoftware.InnoSetup`) a stejnou verzi Node.js, jakou chceš přibalit. Vznikne `dist/Letackomat-Setup-X.Y.Z.exe` (asi 26 MB) a vypíše se jeho SHA-256:
 
 ```bash
-git archive --format=zip --prefix=letackomat-v1.2.1/ -o letackomat-v1.2.1.zip HEAD
+node scripts/build-installer.js
 ```
 
-3. Vytvoř release a přilož zip. Název souboru musí být `letackomat-vX.Y.Z.zip`:
+3. Sestav zip tak, aby měl uvnitř jednu složku se stejným názvem jako soubor:
 
 ```bash
-gh release create v1.2.1 letackomat-v1.2.1.zip --title "Letáčkomat 1.2.1" --notes-file poznamky.md
+git archive --format=zip --prefix=letackomat-v1.4.2/ -o letackomat-v1.4.2.zip HEAD
+```
+
+4. Vytvoř release a přilož obě přílohy. Názvy musí být `Letackomat-Setup-X.Y.Z.exe` a `letackomat-vX.Y.Z.zip`:
+
+```bash
+gh release create v1.4.2 dist/Letackomat-Setup-1.4.2.exe letackomat-v1.4.2.zip --title "Letáčkomat 1.4.2" --notes-file poznamky.md
 ```
 
 V okně aktualizace se uživateli ukážou odrážky (řádky začínající `- `) z poznámek k vydání.
-Aktualizátor před výměnou zkontroluje, že zip obsahuje verzi, kterou ohlásil release, a při chybě vrátí původní soubory.
+Aplikace z instalátoru stáhne `.exe`, ověří SHA-256 z GitHubu (bez něj instalátor nespustí) a spustí ho tiše se stejnou cílovou složkou.
+Aktualizátor zipu před výměnou zkontroluje, že zip obsahuje verzi, kterou ohlásil release, a při chybě vrátí původní soubory.
+Pro rychlé zkušební sestavení instalátoru je `node scripts/build-installer.js --version 9.9.9 --fast --out <složka>`.

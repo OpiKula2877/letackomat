@@ -1141,6 +1141,7 @@ dialog.cmp::backdrop { background: rgba(21, 24, 26, 0.72); backdrop-filter: blur
 }
 .busy__box h2 { margin: 14px 0 6px; font-size: 1.5rem; font-weight: 900; font-stretch: 72%; }
 .busy__box p { margin: 0; color: var(--ink-soft); }
+.busy__close { margin-top: 16px; border: 1px solid var(--line); border-radius: 999px; padding: 8px 18px; background: var(--paper); color: var(--ink); font-weight: 700; font-stretch: 88%; }
 .busy__spin {
   width: 38px; height: 38px;
   margin: 0 auto;

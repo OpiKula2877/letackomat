@@ -94,3 +94,27 @@ writeFileSync(
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="20" fill="#ffd83a"/><g fill="none" stroke="#15181a" stroke-width="8"><circle cx="31" cy="31" r="11"/><circle cx="69" cy="69" r="11"/></g><path d="M69 27 31 73" stroke="#15181a" stroke-width="10.4" stroke-linecap="round"/></svg>\n`,
 );
 console.log('Ikony vytvořeny.');
+
+// icon.ico pro instalátor, zástupce a odinstalaci: obrázky PNG v několika velikostech v jednom souboru ICO
+{
+  const sizes = [16, 32, 48, 64, 128, 256];
+  const frames = sizes.map((s) => png(s, { maskable: false }));
+  const header = Buffer.alloc(6);
+  header.writeUInt16LE(0, 0); // rezervováno
+  header.writeUInt16LE(1, 2); // typ: ikona
+  header.writeUInt16LE(sizes.length, 4);
+  let offset = 6 + 16 * sizes.length;
+  const dir = Buffer.alloc(16 * sizes.length);
+  sizes.forEach((s, i) => {
+    const e = i * 16;
+    dir[e] = s === 256 ? 0 : s; // 0 = 256
+    dir[e + 1] = s === 256 ? 0 : s;
+    dir.writeUInt16LE(1, e + 4); // roviny
+    dir.writeUInt16LE(32, e + 6); // bity na pixel
+    dir.writeUInt32LE(frames[i].length, e + 8);
+    dir.writeUInt32LE(offset, e + 12);
+    offset += frames[i].length;
+  });
+  writeFileSync('web/icons/icon.ico', Buffer.concat([header, dir, ...frames]));
+  console.log('icon.ico vytvořen');
+}

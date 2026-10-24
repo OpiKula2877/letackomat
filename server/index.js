@@ -9,6 +9,8 @@ import { registerRoutes } from './routes.js';
 import { runScrape } from './scraper/run.js';
 import { createUpdateService } from './update.js';
 import { rootDir } from './install.js';
+import { dataDir } from './paths.js';
+import { migrateLegacyData } from './migrate.js';
 import { repairProtocolHandler } from './protocol.js';
 import { createAlerts } from './watch/alerts.js';
 import { quickRefresh } from './watch/quick.js';
@@ -37,8 +39,10 @@ export function buildApp(db, { logger = false, onShutdown, update, alerts } = {}
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  // aplikace z instalátoru při prvním spuštění převezme data ze starší instalace ze zipu
+  const migrated = await migrateLegacyData().catch((e) => ({ status: 'failed', error: e.message }));
   const db = openDb();
-  const pidFile = resolve(process.env.PID_FILE ?? join('data', 'server.pid'));
+  const pidFile = resolve(process.env.PID_FILE ?? join(dataDir(), 'server.pid'));
 
   async function shutdown() {
     // nejdéle 3 s na slušné zavření, pak se končí tak jako tak
@@ -57,10 +61,15 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const app = buildApp(db, { logger: { level: 'info' }, onShutdown: shutdown, update, alerts });
   const host = process.env.HOST ?? '127.0.0.1';
   await app.listen({ port, host });
+  if (migrated.status === 'migrated') app.log.info(`data převzata ze starší instalace: ${migrated.from}`);
+  if (migrated.status === 'failed') app.log.warn(`převzetí dat selhalo: ${migrated.error}`);
 
   // po přejmenování nebo přesunu složky opraví cesty v tlačítku Spustit server a ve skriptu po přihlášení
+  // (NO_REPAIR=1 to vypne, aby zkušební spuštění nepřepisovalo nastavení skutečné instalace)
+  if (process.env.NO_REPAIR !== '1') {
   repairProtocolHandler(rootDir).then((r) => r.status === 'repaired' && app.log.info('letackomat://start přepsáno na tuto složku')).catch(() => {});
   try { if (repairAutostart(rootDir) === 'repaired') app.log.info('skript po přihlášení přepsán na tuto složku'); } catch { /* nevadí */ }
+  }
 
   update.check().catch((e) => app.log.warn(`kontrola aktualizací: ${e.message}`)); // na pozadí, bez internetu nevadí
 

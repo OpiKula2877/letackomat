@@ -1520,7 +1520,7 @@ function renderUpd(st) {
     <h2 id="updTitle">Je dostupná verze ${esc(st.latest)}</h2>
     <p class="upd__ver">Máš verzi ${esc(st.current)}</p>
     ${notes.length ? `<ul class="upd__notes">${notes.map((n) => `<li>${esc(n)}</li>`).join('')}</ul>` : ''}
-    ${reason ? `<p class="upd__hint">${esc(reason)}</p>` : '<p class="upd__hint">Stáhne se z GitHubu a aplikace se sama restartuje. Tvoje data a nákupní seznam zůstanou.</p>'}
+    ${reason ? `<p class="upd__hint">${esc(reason)}</p>` : `<p class="upd__hint">${st.mode === 'installer' ? (st.needsAdmin ? 'Stáhne se instalátor z GitHubu a Windows se zeptá na potvrzení správce. Potom se aplikace sama restartuje.' : 'Stáhne se instalátor z GitHubu a aplikace se sama restartuje.') : 'Stáhne se z GitHubu a aplikace se sama restartuje.'} Tvoje data a nákupní seznam zůstanou.</p>`}
     <div class="upd__actions">
       ${st.canApply ? '<button type="button" class="upd__go">Aktualizovat</button>' : ''}
       ${st.releaseUrl ? `<a class="upd__link" href="${esc(st.releaseUrl)}" target="_blank" rel="noopener">${st.canApply ? 'Podrobnosti' : 'Otevřít na GitHubu'}</a>` : ''}
@@ -1561,18 +1561,29 @@ function showBusy(title, text) {
 }
 
 async function startUpdate(st) {
+  let installerMode = false;
+  let elevated = false;
   closeUpd();
   showBusy(`Aktualizuji na verzi ${st.latest}`, 'Stahuji novou verzi z GitHubu…');
   try {
     const res = await fetch('/api/update/apply', { method: 'POST', headers: { 'x-letackomat': '1' } });
     const body = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(body.error ?? `chyba ${res.status}`);
+    installerMode = Boolean(body.installer);
+    elevated = Boolean(body.elevated);
   } catch (e) {
     $('busy').hidden = true;
     toast(`Aktualizace se nepodařila: ${e.message}`);
     return;
   }
-  $('busyText').textContent = 'Aplikace se restartuje. Po dokončení se sama obnoví, nezavírej ji.';
+  $('busyText').textContent = elevated
+    ? 'Potvrď okno Windows (správce), instalace pak proběhne sama. Aplikace se po dokončení obnoví, nezavírej ji.'
+    : installerMode
+      ? 'Instalátor aktualizuje aplikaci. Po dokončení se sama obnoví, nezavírej ji.'
+      : 'Aplikace se restartuje. Po dokončení se sama obnoví, nezavírej ji.';
+  // u instalátoru jde okno zavřít (třeba když uživatel potvrzení správce zruší), aplikace zatím normálně běží
+  $('busyClose').hidden = !installerMode;
+  $('busyClose').onclick = () => { clearInterval(timer); $('busy').hidden = true; };
   // server se vypne a updater ho po výměně souborů spustí znovu; po návratu se stránka obnoví
   let wentDown = false;
   const t0 = Date.now();
@@ -1582,7 +1593,7 @@ async function startUpdate(st) {
     else if (wentDown || h.version === st.latest) {
       clearInterval(timer);
       location.reload();
-    } else if (Date.now() - t0 > 90_000) {
+    } else if (Date.now() - t0 > (installerMode ? 240_000 : 90_000)) {
       clearInterval(timer);
       $('busy').hidden = true;
       toast('Aktualizace trvá nezvykle dlouho. Zkus stránku obnovit.');

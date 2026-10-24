@@ -15,49 +15,67 @@ export const autostartInstalled = () => existsSync(autostartFile());
 
 const vbsString = (s) => `"${String(s).replace(/"/g, '""')}"`;
 
-/** Obsah skriptu: spustí launcher skrytě v dané instalaci. */
-export function buildAutostartScript(root) {
+/**
+ * Obsah skriptu: spustí launcher skrytě v dané instalaci.
+ * Používá celou cestu k node.exe, protože po přihlášení do Windows nemusí být node v PATH
+ * (a u instalátoru je node.exe přibalený vedle aplikace).
+ */
+export function buildAutostartScript(root, nodePath = process.execPath) {
   return [
     "' Letáčkomat: spustí aplikaci na pozadí po přihlášení do Windows.",
     "' Vytvořeno zapnutím oznámení v aplikaci. Smaže se jejich vypnutím.",
     'Set shell = CreateObject("WScript.Shell")',
     `shell.CurrentDirectory = ${vbsString(root)}`,
-    'shell.Run "cmd /c node scripts\\launcher.js start --no-open", 0, False',
+    `shell.Run Chr(34) & ${vbsString(nodePath)} & Chr(34) & " scripts\\launcher.js start --no-open", 0, False`,
     '',
   ].join('\r\n');
 }
 
-export function enableAutostart(root) {
+export function enableAutostart(root, nodePath = process.execPath) {
   if (!autostartSupported()) throw new Error('Spouštění po přihlášení je jen pro Windows.');
   mkdirSync(startupDir(), { recursive: true });
   // UTF-16 s BOM: wscript tak přečte i cestu s českými znaky
-  writeFileSync(autostartFile(), Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(buildAutostartScript(root), 'utf16le')]));
+  writeFileSync(autostartFile(), Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(buildAutostartScript(root, nodePath), 'utf16le')]));
 }
 
 export function disableAutostart() {
   rmSync(autostartFile(), { force: true });
 }
 
-/** Složka, na kterou ukazuje nainstalovaný skript (z řádku shell.CurrentDirectory). */
-export function installedRoot() {
+function readScript() {
   try {
     const raw = readFileSync(autostartFile());
-    const text = raw.subarray(0, 2).equals(Buffer.from([0xff, 0xfe])) ? raw.subarray(2).toString('utf16le') : raw.toString('utf8');
-    const m = /shell\.CurrentDirectory = "((?:[^"]|"")*)"/.exec(text);
-    return m ? m[1].replace(/""/g, '"') : null;
+    return raw.subarray(0, 2).equals(Buffer.from([0xff, 0xfe])) ? raw.subarray(2).toString('utf16le') : raw.toString('utf8');
   } catch {
     return null;
   }
 }
 
+const unquote = (s) => s.replace(/""/g, '"');
+
+/** Složka, na kterou ukazuje nainstalovaný skript (z řádku shell.CurrentDirectory). */
+export function installedRoot() {
+  const m = /shell\.CurrentDirectory = "((?:[^"]|"")*)"/.exec(readScript() ?? '');
+  return m ? unquote(m[1]) : null;
+}
+
+/** Cesta k node.exe uložená ve skriptu (starší skripty ji nemají a spoléhají na PATH). */
+export function installedNode() {
+  const m = /shell\.Run Chr\(34\) & "((?:[^"]|"")*)" & Chr\(34\)/.exec(readScript() ?? '');
+  return m ? unquote(m[1]) : null;
+}
+
 /**
- * Po přejmenování nebo přesunu složky aplikace ukazuje skript po přihlášení do prázdna.
- * Při startu serveru se proto přepíše na aktuální složku, ale jen když ta původní už neexistuje.
+ * Po přejmenování nebo přesunu složky aplikace (nebo po instalaci jinam) ukazuje skript po přihlášení do prázdna.
+ * Při startu serveru se proto přepíše na aktuální umístění, ale jen když to původní už neexistuje.
  */
-export function repairAutostart(root) {
+export function repairAutostart(root, nodePath = process.execPath) {
   if (!autostartSupported() || !autostartInstalled()) return 'absent';
   const old = installedRoot();
-  if (old && existsSync(join(old, 'scripts', 'launcher.js'))) return 'ok';
-  enableAutostart(root);
+  const node = installedNode();
+  const rootOk = old && existsSync(join(old, 'scripts', 'launcher.js'));
+  const nodeOk = node === null || existsSync(node);
+  if (rootOk && nodeOk) return 'ok';
+  enableAutostart(root, nodePath);
   return 'repaired';
 }

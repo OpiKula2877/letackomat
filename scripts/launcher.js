@@ -6,12 +6,14 @@ import { createHash } from 'node:crypto';
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, rmSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { dataDir } from '../server/paths.js';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const port = Number(process.env.PORT) || 3000;
 const base = `http://127.0.0.1:${port}`;
-const pidFile = join(root, 'data', 'server.pid');
-const logFile = join(root, 'data', 'server.log');
+const dataRoot = dataDir({ root });
+const pidFile = join(dataRoot, 'server.pid');
+const logFile = join(dataRoot, 'server.log');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /** Odpověď /api/health běžícího serveru, nebo null, když na portu nic neodpovídá. */
@@ -100,7 +102,7 @@ async function start() {
 
   console.log('Spouštím server na pozadí...');
   if (!(await waitFor(health, 20_000))) {
-    console.error('Server se nespustil. Poslední řádky logu (data/server.log):\n');
+    console.error(`Server se nespustil. Poslední řádky logu (${logFile}):\n`);
     console.error(tail(logFile));
     return 1;
   }

@@ -4,14 +4,16 @@
 import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getMeta, setMeta } from './db.js';
+import { dataDir, isInstalled } from './paths.js';
 
 const defaultRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const CHECK_TTL_MS = 15 * 60 * 1000; // GitHub API bez přihlášení má limit 60 dotazů za hodinu, 15 minut stačí a nová verze se ukáže hned při otevření
 const RETRY_AFTER_ERROR_MS = 10 * 60 * 1000;
 const MAX_ZIP_BYTES = 100 * 1024 * 1024;
+const MAX_INSTALLER_BYTES = 300 * 1024 * 1024;
 
 export function readPackage(rootDir = defaultRoot) {
   return JSON.parse(readFileSync(join(rootDir, 'package.json'), 'utf8'));
@@ -43,21 +45,25 @@ export function parseRelease(json) {
   if (!json || json.draft || json.prerelease) return null;
   const version = String(json.tag_name ?? '').replace(/^v/, '');
   if (!parseVersion(version)) return null;
-  const asset = (json.assets ?? []).find((a) => /^letackomat-v?\d+\.\d+\.\d+\.zip$/i.test(a.name) && a.state !== 'new');
+  const pick = (re) => {
+    const a = (json.assets ?? []).find((x) => re.test(x.name) && x.state !== 'new');
+    return a
+      ? {
+          name: a.name,
+          url: a.browser_download_url,
+          size: a.size ?? null,
+          sha256: /^sha256:([0-9a-f]{64})$/i.exec(a.digest ?? '')?.[1]?.toLowerCase() ?? null,
+        }
+      : null;
+  };
   return {
     version,
     name: json.name ?? `Verze ${version}`,
     notes: String(json.body ?? ''),
     url: json.html_url ?? null,
     publishedAt: json.published_at ?? null,
-    asset: asset
-      ? {
-          name: asset.name,
-          url: asset.browser_download_url,
-          size: asset.size ?? null,
-          sha256: /^sha256:([0-9a-f]{64})$/i.exec(asset.digest ?? '')?.[1]?.toLowerCase() ?? null,
-        }
-      : null,
+    asset: pick(/^letackomat-v?\d+\.\d+\.\d+\.zip$/i), // zip pro přenosnou variantu a pro starší verze aplikace
+    installer: pick(/^Letackomat-Setup-\d+\.\d+\.\d+\.exe$/i), // instalátor pro aplikaci nainstalovanou instalátorem
   };
 }
 
@@ -70,8 +76,14 @@ export function createUpdateService(db, opts = {}) {
   const fetchImpl = opts.fetch ?? fetch;
   const ttl = opts.ttlMs ?? CHECK_TTL_MS;
   const disabled = opts.disabled ?? (process.env.NO_UPDATE_CHECK === '1' || !apiUrl);
-  const updateDir = join(rootDir, 'data', 'update');
+  const dataRoot = dataDir({ root: rootDir });
+  const updateDir = join(dataRoot, 'update');
   const isGitCheckout = existsSync(join(rootDir, '.git'));
+  const installed = opts.installed ?? isInstalled(rootDir); // nainstalováno instalátorem (installed.flag), ne ze zipu
+  const spawnFn = opts.spawn ?? spawn;
+  const programFiles = (opts.programFiles ?? [process.env.ProgramFiles, process.env['ProgramFiles(x86)'], process.env.ProgramW6432]).filter(Boolean);
+  // instalace do C:\Program Files = pro všechny uživatele, aktualizace pak vyžádá potvrzení správce (UAC)
+  const needsAdmin = installed && programFiles.some((p) => resolve(rootDir).toLowerCase().startsWith(resolve(p).toLowerCase() + sep));
 
   // stahovat smí jen z releasů tohoto repa (nebo z adresy zadané pro testy přes UPDATE_API_URL)
   const allowedPrefixes = [
@@ -118,8 +130,10 @@ export function createUpdateService(db, opts = {}) {
     const available = Boolean(rel) && compareVersions(rel.version, current) > 0;
     let reason = null;
     if (available && isGitCheckout) reason = 'git';
-    else if (available && !rel.asset) reason = 'no-asset';
+    else if (available && !(installed ? rel.installer : rel.asset)) reason = 'no-asset';
     return {
+      mode: installed ? 'installer' : 'zip',
+      needsAdmin,
       enabled: !disabled,
       current,
       latest: rel?.version ?? null,
@@ -140,9 +154,10 @@ export function createUpdateService(db, opts = {}) {
     await check({ force: true });
     const st = status();
     if (!st.available) throw Object.assign(new Error('Žádná novější verze není k dispozici.'), { code: 409 });
-    if (!st.canApply) throw Object.assign(new Error(st.reason === 'git' ? 'Instalace přes git se aktualizuje příkazem git pull.' : 'Release neobsahuje zip s aplikací.'), { code: 409 });
+    if (!st.canApply) throw Object.assign(new Error(st.reason === 'git' ? 'Instalace přes git se aktualizuje příkazem git pull.' : installed ? 'Release neobsahuje instalátor.' : 'Release neobsahuje zip s aplikací.'), { code: 409 });
 
     const rel = cache.release;
+    if (installed) return applyInstaller(rel);
     if (!allowedPrefixes.some((p) => rel.asset.url?.startsWith(p))) {
       throw Object.assign(new Error('Adresa souboru s aktualizací není z tohoto repozitáře.'), { code: 502 });
     }
@@ -166,12 +181,48 @@ export function createUpdateService(db, opts = {}) {
 
     const child = spawn(
       process.execPath,
-      [runner, '--root', rootDir, '--zip', zipPath, '--from', current, '--to', rel.version, '--port', String(process.env.PORT || 3000)],
+      [runner, '--root', rootDir, '--data', dataRoot, '--zip', zipPath, '--from', current, '--to', rel.version, '--port', String(process.env.PORT || 3000)],
       { detached: true, stdio: 'ignore', windowsHide: true, env: process.env },
     );
     child.unref();
     return { version: rel.version };
   }
 
-  return { check, status, startApply, current };
+  /**
+   * Instalace z instalátoru: stáhne Letackomat-Setup-X.exe, ověří ho kontrolním součtem a spustí ho potichu.
+   * Instalátor sám vyžádá UAC (u Program Files), vypne běžící server, vymění soubory a aplikaci znovu spustí.
+   * Server se proto nevypíná předem: kdyby uživatel UAC zrušil, aplikace by jinak zůstala vypnutá.
+   */
+  async function applyInstaller(rel) {
+    const a = rel.installer;
+    if (!allowedPrefixes.some((p) => a.url?.startsWith(p))) {
+      throw Object.assign(new Error('Adresa instalátoru není z tohoto repozitáře.'), { code: 502 });
+    }
+    if (!a.sha256) throw Object.assign(new Error('U instalátoru chybí kontrolní součet, nespouštím ho.'), { code: 502 });
+    const res = await fetchImpl(a.url, { redirect: 'follow', headers: { 'user-agent': 'Letackomat-updater' }, signal: AbortSignal.timeout(300_000) });
+    if (!res.ok) throw Object.assign(new Error(`Stažení selhalo (${res.status}).`), { code: 502 });
+    const bytes = Buffer.from(await res.arrayBuffer());
+    if (bytes.length === 0 || bytes.length > MAX_INSTALLER_BYTES) throw Object.assign(new Error('Stažený soubor má nečekanou velikost.'), { code: 502 });
+    if (a.size && bytes.length !== a.size) throw Object.assign(new Error('Stažený soubor je neúplný.'), { code: 502 });
+    if (bytes.subarray(0, 2).toString() !== 'MZ') throw Object.assign(new Error('Stažený soubor není instalátor.'), { code: 502 });
+    if (createHash('sha256').update(bytes).digest('hex') !== a.sha256) {
+      throw Object.assign(new Error('Kontrolní součet staženého instalátoru nesedí.'), { code: 502 });
+    }
+
+    mkdirSync(updateDir, { recursive: true });
+    const exe = join(updateDir, a.name);
+    writeFileSync(exe, bytes);
+    const args = [
+      '/SILENT', '/SUPPRESSMSGBOXES', '/NORESTART',
+      `/DIR=${rootDir}`, // vždy do stejné složky
+      needsAdmin ? '/ALLUSERS' : '/CURRENTUSER',
+      `/LOG=${join(updateDir, 'installer.log')}`,
+    ];
+    const child = spawnFn(exe, args, { detached: true, stdio: 'ignore', windowsHide: false });
+    child.on?.('error', () => {}); // chyba spuštění se projeví tím, že se aplikace neobnoví
+    child.unref?.();
+    return { version: rel.version, shutdown: false, installer: true, elevated: needsAdmin };
+  }
+
+  return { check, status, startApply, current, mode: installed ? 'installer' : 'zip' };
 }

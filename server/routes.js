@@ -115,9 +115,10 @@ export function registerRoutes(app, db, { onShutdown, update, alerts } = {}) {
     if (!update || !onShutdown) return reply.code(501).send({ error: 'aktualizace není v tomto režimu dostupná' });
     if (!isTrusted(req)) return reply.code(403).send({ error: 'jen z tohoto počítače' });
     try {
-      const { version: to } = await update.startApply();
-      reply.code(202).send({ starting: true, version: to });
-      setTimeout(() => onShutdown(), 500); // updater čeká, až server skončí
+      const { version: to, shutdown = true, installer = false, elevated = false } = await update.startApply();
+      reply.code(202).send({ starting: true, version: to, installer, elevated });
+      // zip: updater čeká, až server skončí; instalátor server vypne sám, až uživatel potvrdí UAC
+      if (shutdown) setTimeout(() => onShutdown(), 500);
       return reply;
     } catch (e) {
       return reply.code(e.code ?? 500).send({ error: e.message });

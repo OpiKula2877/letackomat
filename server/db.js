@@ -1,10 +1,11 @@
 // SQLite přes vestavěný node:sqlite (žádná nativní kompilace).
 import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { dirname, join } from 'node:path';
+import { dataDir } from './paths.js';
 import { parseUnitPrice } from './units.js';
 
-export function openDb(file = process.env.DB_FILE ?? resolve('data', 'letackomat.db')) {
+export function openDb(file = process.env.DB_FILE ?? join(dataDir(), 'letackomat.db')) {
   if (file !== ':memory:') mkdirSync(dirname(file), { recursive: true });
   const db = new DatabaseSync(file);
   db.exec(`

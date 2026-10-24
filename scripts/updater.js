@@ -90,7 +90,7 @@ function dependenciesDiffer(oldPkgPath, newPkgPath, root) {
 export async function applyUpdate(o) {
   const log = o.log ?? (() => {});
   const extract = o.extract ?? extractZip;
-  const updateDir = join(o.root, 'data', 'update');
+  const updateDir = join(o.dataDir ?? join(o.root, 'data'), 'update');
   const stamp = Date.now();
   const tmp = join(updateDir, `extract-${stamp}`);
   const backup = join(updateDir, `backup-${o.from}-${stamp}`);
@@ -166,13 +166,14 @@ function pruneBackups(updateDir, keep) {
 function args() {
   const a = process.argv.slice(2);
   const get = (k) => a[a.indexOf(`--${k}`) + 1];
-  return { root: get('root'), zip: get('zip'), from: get('from'), to: get('to'), port: Number(get('port')) || 3000 };
+  return { root: get('root'), data: get('data'), zip: get('zip'), from: get('from'), to: get('to'), port: Number(get('port')) || 3000 };
 }
 
 async function main() {
-  const { root, zip, from, to, port } = args();
+  const { root, data, zip, from, to, port } = args();
+  const dataRoot = data || join(root, 'data');
   if (!root || !zip || !from || !to) throw new Error('Chybí parametry (--root --zip --from --to).');
-  const updateDir = join(root, 'data', 'update');
+  const updateDir = join(dataRoot, 'update');
   mkdirSync(updateDir, { recursive: true });
   const logFile = join(updateDir, 'update.log');
   const log = (m) => appendFileSync(logFile, `${new Date().toISOString()} ${m}\n`);
@@ -190,7 +191,7 @@ async function main() {
   };
 
   const result = await applyUpdate({
-    root, zip, from, to, log,
+    root, dataDir: dataRoot, zip, from, to, log,
     waitDown: async () => {
       for (let i = 0; i < 60; i++) {
         if (!(await health())) return;
