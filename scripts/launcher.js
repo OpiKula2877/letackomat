@@ -1,5 +1,5 @@
 // Spuštění a vypnutí serveru na pozadí (volají start.bat a end.bat).
-//   node scripts/launcher.js start   – spustí server bez okna a otevře prohlížeč
+//   node scripts/launcher.js start   – spustí server bez okna a otevře aplikaci (okno Edge/Chrome bez adresního řádku)
 //   node scripts/launcher.js stop    – vypne server
 import { execFileSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -7,6 +7,7 @@ import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, rmS
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { dataDir } from '../server/paths.js';
+import { openApp } from './open-app.js';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const port = Number(process.env.PORT) || 3000;
@@ -71,7 +72,7 @@ const noOpen = process.argv.includes('--no-open');
 
 function openBrowser(url) {
   if (noOpen) return;
-  spawn('cmd', ['/c', 'start', '', url], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
+  openApp(url);
 }
 
 async function start() {

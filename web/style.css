@@ -532,6 +532,38 @@ a { color: inherit; }
   color: var(--ink-soft);
 }
 .empty strong { display: block; color: var(--ink); font-size: 1.15rem; margin-bottom: 4px; }
+.empty--first { padding: 40px clamp(16px, 6vw, 80px); }
+.empty__act { margin-top: 18px; }
+.empty__btn {
+  border: 0;
+  background: var(--tag);
+  color: var(--on-tag);
+  padding: 12px 28px;
+  border-radius: 999px;
+  font-weight: 800;
+  font-stretch: 85%;
+  font-size: 1rem;
+}
+.prog {
+  max-width: 520px;
+  height: 14px;
+  margin: 16px auto 10px;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+}
+.prog span {
+  display: block;
+  height: 100%;
+  min-width: 6px; /* i na nule je vidět, že ukazatel žije */
+  border-radius: inherit;
+  background: var(--solid-bg);
+  transition: width 0.6s ease;
+}
+.prog__txt, .prog__where { margin: 0; }
+.prog__txt { color: var(--ink); }
+.prog__txt b { font-weight: 800; }
+.prog__where { margin-top: 4px; font-size: 0.92rem; }
 .skeleton {
   height: 330px;
   border-radius: var(--radius);

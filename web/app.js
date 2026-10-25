@@ -983,10 +983,8 @@ async function load(reset) {
       }`
       : '';
     if (!data.total && reset) {
-      const noData = state.health && state.health.deals === 0;
-      grid.innerHTML = noData
-        ? `<div class="empty"><strong>${state.health.scraping ? 'Stahují se první data' : 'Zatím tu nejsou žádná data'}</strong>${state.health.scraping ? 'Potrvá to pár minut. Pak stránku obnov.' : 'Spusť npm run scrape.'}</div>`
-        : `<div class="empty"><strong>V tomto termínu nic není</strong>Zkus jiný den nebo období, zruš filtry nebo vyber další obchody.</div>`;
+      if (state.health && state.health.deals === 0) showFirstData(grid);
+      else grid.innerHTML = `<div class="empty"><strong>V tomto termínu nic není</strong>Zkus jiný den nebo období, zruš filtry nebo vyber další obchody.</div>`;
     }
   } catch (e) {
     if (id !== reqId) return;
@@ -996,6 +994,67 @@ async function load(reset) {
 }
 
 const plural = (n) => (n === 1 ? 'akce' : n >= 2 && n <= 4 ? 'akce' : 'akcí');
+
+/* ——— první data: ukazatel stahování ——— */
+const shopsWord = (n) => (n === 1 ? 'obchod' : n >= 2 && n <= 4 ? 'obchody' : 'obchodů');
+
+/** Obsah rámečku podle průběhu stahování ze serveru (`/api/health`). */
+function firstDataView(h) {
+  const p = h.progress ?? { phase: 'idle' };
+  if (p.phase === 'running' || p.phase === 'waiting') {
+    // hotové obchody jsou přesně, rozdělaný se počítá odhadem podle stránek (obchod má zhruba 10 stránek), ať ukazatel nestojí
+    const partial = p.phase === 'running' ? Math.min(p.page / 10, 0.9) : 0;
+    const pct = p.total ? Math.min(99, Math.round(((p.done + partial) / p.total) * 100)) : 0;
+    const where = p.phase === 'waiting'
+      ? `Něco se nepovedlo (${p.failed} ${shopsWord(p.failed)}), zkusím to znovu za ${Math.max(1, Math.ceil((p.retryAt - Date.now()) / 60_000))} min.`
+      : p.current ? `Teď: ${esc(p.current)}${p.page ? `, stránka ${p.page}` : ''}` : 'Připravuju stahování…';
+    return `<strong>${p.phase === 'waiting' ? 'Stahování čeká na další pokus' : 'Stahují se první data'}</strong>
+      <div class="prog" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}" aria-label="Průběh stahování"><span style="width:${pct}%"></span></div>
+      <p class="prog__txt"><b>${p.done} z ${p.total}</b> ${shopsWord(p.total)} · ${pct} % · ${p.deals.toLocaleString('cs-CZ')} ${plural(p.deals)}</p>
+      <p class="prog__where">${where}</p>`;
+  }
+  if (h.deals > 0) {
+    return `<strong>Akce jsou stažené</strong>Je jich ${h.deals.toLocaleString('cs-CZ')}. Obnov stránku a uvidíš je.
+      <div class="empty__act"><button class="empty__btn" type="button" data-act="reload">Obnovit</button></div>`;
+  }
+  return `<strong>Zatím tu nejsou žádná data</strong>Stáhni akce z kupi.cz, potrvá to pár minut.
+    <div class="empty__act"><button class="empty__btn" type="button" data-act="scrape">Stáhnout akce</button></div>`;
+}
+
+/** Místo prázdné stránky ukáže, kolik stahování zbývá; po dokončení nabídne tlačítko Obnovit. */
+function showFirstData(grid) {
+  const box = Object.assign(document.createElement('div'), { className: 'empty empty--first' });
+  box.setAttribute('aria-live', 'polite');
+  grid.replaceChildren(box);
+  let last = '';
+  const paint = (h) => {
+    const html = firstDataView(h);
+    if (html !== last) box.innerHTML = last = html; // stejný obsah se nepřekresluje, ať neblikají tlačítka
+  };
+  paint(state.health);
+  box.addEventListener('click', async (e) => {
+    const act = e.target.closest('[data-act]')?.dataset.act;
+    if (act === 'reload') location.reload();
+    if (act === 'scrape') {
+      try { await alertsApi('POST', '/api/scrape'); } catch (err) { toast(`Stahování se nepodařilo spustit: ${err.message}`); return; }
+      poll();
+    }
+  });
+  let timer = null;
+  async function poll() {
+    clearTimeout(timer);
+    if (!box.isConnected) return; // stránka se mezitím přepnula jinam
+    const h = await api('/api/health').catch(() => null);
+    if (h) {
+      state.health = h;
+      paint(h);
+      if (h.progress?.phase === 'idle' && h.deals > 0) return; // hotovo, zbývá jen tlačítko Obnovit
+    }
+    timer = setTimeout(poll, 1000);
+  }
+  const h0 = state.health;
+  if (h0?.progress?.phase !== 'idle' || h0?.deals === 0) timer = setTimeout(poll, 1000);
+}
 
 function setView(view) {
   if (view === 'alerts' && $('alertsTab').hidden) view = 'all'; // upozornění jsou jen na počítači, kde aplikace běží

@@ -10,17 +10,42 @@ export function isScraping() {
   return running;
 }
 
+const SHOP_NAMES = {
+  'penny-market': 'Penny', coop: 'COOP', cba: 'CBA', jip: 'JIP', 'flop-top': 'Flop Top', 'eso-market': 'ESO Market',
+  'dm-drogerie': 'dm drogerie', 'teta-drogerie': 'Teta drogerie', 'dr-max': 'Dr. Max',
+};
+const shopName = (slug) => SHOP_NAMES[slug] ?? slug.charAt(0).toUpperCase() + slug.slice(1);
+
+const idle = () => ({ phase: 'idle', total: 0, done: 0, current: null, page: 0, deals: 0, failed: new Set(), retryAt: null });
+let progress = idle();
+
+/**
+ * Průběh stahování pro ukazatel v aplikaci: kolik obchodů je hotových z kolika, který se právě stahuje,
+ * kolik akcí už je a jestli se čeká na další pokus (`phase`: idle | running | waiting).
+ */
+export function scrapeProgress() {
+  const { failed, ...rest } = progress;
+  return { ...rest, failed: failed.size };
+}
+
 export async function runScrape(db, shops = DEFAULT_SHOPS, log = console.log, { scrape = scrapeShop } = {}) {
   if (running) throw new Error('Scrape už běží');
   running = true;
+  // samostatné stažení si průběh vede samo; při opakování ho vede obálka runScrapeWithRetry
+  const ownProgress = progress.phase === 'idle';
+  if (ownProgress) progress = { ...idle(), total: shops.length };
+  progress.phase = 'running';
+  progress.retryAt = null;
   const writer = makeWriter(db);
   const seen = todayISO();
   const summary = {};
   try {
     for (const slug of shops) {
+      progress.current = shopName(slug);
+      progress.page = 0;
       try {
         const { deals, unknownValidity, error } = await scrape(slug, {
-          onPage: (p) => log(`  ${slug} str. ${p.page}: +${p.added}`),
+          onPage: (p) => { progress.page = p.page; log(`  ${slug} str. ${p.page}: +${p.added}`); },
         });
         writer.tx(() => {
           const shopsDone = new Set();
@@ -35,9 +60,13 @@ export async function runScrape(db, shops = DEFAULT_SHOPS, log = console.log, { 
         });
         // obchod, který se přerušil uprostřed, uloží stažené stránky a pořád se bere jako chyba (zkusí se znovu)
         summary[slug] = error ? { deals: deals.length, unknownValidity, error } : { deals: deals.length, unknownValidity };
+        progress.deals += deals.length;
+        if (error) progress.failed.add(slug);
+        else { progress.failed.delete(slug); progress.done++; }
         log(error ? `${slug}: ${deals.length} akcí, ale přerušeno: ${error}` : `${slug}: ${deals.length} akcí (nerozpoznaná platnost: ${unknownValidity})`);
       } catch (e) {
         summary[slug] = { error: e.message };
+        progress.failed.add(slug);
         log(`${slug}: CHYBA ${e.message}`);
       }
     }
@@ -46,6 +75,8 @@ export async function runScrape(db, shops = DEFAULT_SHOPS, log = console.log, { 
     setMeta(db, 'last_scrape_summary', JSON.stringify(summary));
   } finally {
     running = false;
+    if (ownProgress) progress = idle();
+    else progress.current = null;
   }
   return summary;
 }
@@ -62,13 +93,21 @@ export function runScrapeWithRetry(db, { shops = DEFAULT_SHOPS, log = console.lo
     const summary = {};
     let todo = shops;
     let attempts = 0;
-    for (;;) {
-      attempts++;
-      Object.assign(summary, await runScrape(db, todo, log, { scrape }));
-      todo = Object.keys(summary).filter((s) => summary[s].error);
-      if (!todo.length || attempts > maxRetries) break;
-      log(`stahování: ${todo.length} obchodů selhalo, zkusím znovu za ${Math.round(retryMs / 60_000)} min`);
-      await wait(retryMs);
+    if (running) throw new Error('Scrape už běží'); // ruční stažení běží vlastním průběhem, ten se nepřepisuje
+    progress = { ...idle(), phase: 'running', total: shops.length };
+    try {
+      for (;;) {
+        attempts++;
+        Object.assign(summary, await runScrape(db, todo, log, { scrape }));
+        todo = Object.keys(summary).filter((s) => summary[s].error);
+        if (!todo.length || attempts > maxRetries) break;
+        log(`stahování: ${todo.length} obchodů selhalo, zkusím znovu za ${Math.round(retryMs / 60_000)} min`);
+        progress.phase = 'waiting';
+        progress.retryAt = Date.now() + retryMs;
+        await wait(retryMs);
+      }
+    } finally {
+      progress = idle();
     }
     return { summary, attempts };
   })().finally(() => { retrying = null; });

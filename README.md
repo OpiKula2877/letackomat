@@ -18,8 +18,8 @@ Od verze 1.4.1 se Letáčkomat instaluje instalátorem. Nepotřebuješ nic jiné
 
 1. Otevři [Releases](https://github.com/OpiKula2877/letackomat/releases/latest) a stáhni `Letackomat-Setup-X.Y.Z.exe`.
 2. Spusť ho. Instalátor nabídne složku (výchozí `C:\Program Files\Letackomat`, vyžaduje potvrzení správcem) nebo volbu **jen pro mě** bez správce (`%LocalAppData%\Programs\Letackomat`).
-3. Volitelně zaškrtni zástupce na ploše a tlačítko Spustit server v aplikaci (registrace adresy `letackomat://`).
-4. Po dokončení se aplikace spustí a otevře se prohlížeč na <http://localhost:3000>. Při prvním spuštění se stáhnou data o akcích, což trvá několik minut. Dál ji najdeš ve Start menu: **Letáčkomat** (spustí a otevře), **Vypnout Letáčkomat**, **Odinstalovat Letáčkomat** (také v Nastavení, Aplikace).
+3. Zástupce na ploše se vytvoří sám (jde odškrtnout), stejně tak tlačítko Spustit server v aplikaci (registrace adresy `letackomat://`).
+4. Po dokončení se aplikace spustí a otevře se jako samostatné okno (Edge nebo Chrome bez adresního řádku, takže není potřeba nic instalovat z prohlížeče). Když ho chceš mít jako záložku v prohlížeči, nastav proměnnou prostředí `LETACKOMAT_BROWSER=tab`. Při prvním spuštění se stáhnou data o akcích, což trvá několik minut; průběh je vidět na ukazateli a po dokončení stačí kliknout na Obnovit. Dál ji najdeš ve Start menu: **Letáčkomat** (spustí a otevře), **Vypnout Letáčkomat**, **Odinstalovat Letáčkomat** (také v Nastavení, Aplikace).
 
 Instalátor zatím není podepsaný certifikátem vydavatele, takže Windows (SmartScreen) ukáže "Neznámý vydavatel". Klikni na **Další informace** a **Přesto spustit**.
 

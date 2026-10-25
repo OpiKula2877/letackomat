@@ -7,7 +7,7 @@ import { isLocal, isTrusted } from './local.js';
 import { registerProduct } from './product.js';
 import { registerAlerts } from './watch/routes.js';
 import { buildFilter, SORTS, splitCsv, toItem } from './query.js';
-import { isScraping, runScrape } from './scraper/run.js';
+import { isScraping, runScrapeWithRetry, scrapeProgress } from './scraper/run.js';
 import { readPackage } from './update.js';
 import { addDays, isISODate, todayISO } from './util.js';
 
@@ -22,6 +22,7 @@ export function registerRoutes(app, db, { onShutdown, update, alerts } = {}) {
     today: todayISO(),
     lastScrape: getMeta(db, 'last_scrape'),
     scraping: isScraping(),
+    progress: scrapeProgress(),
     deals: db.prepare('SELECT COUNT(*) n FROM deals').get().n,
     canShutdown: Boolean(onShutdown) && isLocal(req),
   }));
@@ -140,7 +141,7 @@ export function registerRoutes(app, db, { onShutdown, update, alerts } = {}) {
     if (!isTrusted(req)) return reply.code(403).send({ error: 'jen z tohoto počítače' });
     if (isScraping()) return reply.code(409).send({ error: 'scrape už běží' });
     const shops = splitCsv(req.query.shops);
-    runScrape(db, shops.length ? shops : undefined).catch((e) => app.log.error(e));
+    runScrapeWithRetry(db, { shops: shops.length ? shops : undefined, log: (m) => app.log.info(m) }).catch((e) => app.log.error(e));
     return reply.code(202).send({ started: true });
   });
 }

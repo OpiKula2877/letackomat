@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import { getMeta, openDb } from '../server/db.js';
 import { migrateLegacyData } from '../server/migrate.js';
-import { runScrape, runScrapeWithRetry } from '../server/scraper/run.js';
+import { runScrape, runScrapeWithRetry, scrapeProgress } from '../server/scraper/run.js';
 import { scrapeShop } from '../server/scraper/kupi.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -48,6 +48,37 @@ test('neúspěšné obchody se zkusí znovu, úspěšné ne', async () => {
   assert.deepEqual(waits, [123, 123]);
   assert.equal(out.summary.lidl.error, undefined);
   assert.equal(out.attempts, 3);
+  db.close();
+});
+
+test('průběh stahování: hotové obchody, aktuální obchod, čekání na další pokus a návrat do klidu', async () => {
+  const db = memDb();
+  assert.equal(scrapeProgress().phase, 'idle');
+  const seen = [];
+  let lidlTries = 0;
+  const scrape = async (slug, { onPage }) => {
+    onPage?.({ page: 3, added: 1 });
+    seen.push({ slug, ...scrapeProgress() });
+    if (slug === 'lidl' && ++lidlTries < 2) throw new Error('fetch failed');
+    return { deals: [], unknownValidity: 0 };
+  };
+  const waiting = [];
+  await runScrapeWithRetry(db, {
+    shops: ['albert', 'penny-market', 'lidl'], log: quiet, scrape, retryMs: 1000,
+    wait: async () => { waiting.push(scrapeProgress()); },
+  });
+  assert.deepEqual(seen.map((s) => [s.phase, s.total, s.done, s.current, s.page]), [
+    ['running', 3, 0, 'Albert', 3],
+    ['running', 3, 1, 'Penny', 3],
+    ['running', 3, 2, 'Lidl', 3],
+    ['running', 3, 2, 'Lidl', 3], // druhý pokus: hotové obchody se nezapomněly
+  ]);
+  assert.equal(waiting.length, 1);
+  assert.equal(waiting[0].phase, 'waiting');
+  assert.equal(waiting[0].failed, 1);
+  assert.ok(waiting[0].retryAt > Date.now());
+  assert.equal(scrapeProgress().phase, 'idle');
+  assert.equal(scrapeProgress().total, 0);
   db.close();
 });
 

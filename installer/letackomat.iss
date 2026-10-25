@@ -45,6 +45,8 @@ WizardStyle=modern
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 ShowLanguageDialog=no
+; výchozí volby úloh platí při každé instalaci, i při tiché aktualizaci z aplikace (zástupce na ploše tak vznikne i u starších instalací)
+UsePreviousTasks=no
 CloseApplications=yes
 RestartApplications=no
 
@@ -52,7 +54,7 @@ RestartApplications=no
 Name: "czech"; MessagesFile: "compiler:Languages\Czech.isl"
 
 [Tasks]
-Name: "desktopicon"; Description: "Vytvořit zástupce na ploše"; Flags: unchecked
+Name: "desktopicon"; Description: "Vytvořit zástupce na ploše (otevře Letáčkomat jako okno aplikace)"
 Name: "protocol"; Description: "Povolit tlačítko Spustit server v aplikaci (zaregistruje adresu letackomat://)"
 
 [Files]
@@ -66,7 +68,7 @@ Type: filesandordirs; Name: "{app}\scripts"
 Type: filesandordirs; Name: "{app}\node_modules"
 
 [Icons]
-Name: "{autoprograms}\Letáčkomat"; Filename: "{sys}\wscript.exe"; Parameters: """{app}\scripts\app.vbs"""; WorkingDir: "{app}"; IconFilename: "{app}\web\icons\icon.ico"; Comment: "Spustí Letáčkomat a otevře ho v prohlížeči"
+Name: "{autoprograms}\Letáčkomat"; Filename: "{sys}\wscript.exe"; Parameters: """{app}\scripts\app.vbs"""; WorkingDir: "{app}"; IconFilename: "{app}\web\icons\icon.ico"; Comment: "Spustí Letáčkomat a otevře ho jako okno aplikace"
 Name: "{autoprograms}\Vypnout Letáčkomat"; Filename: "{sys}\wscript.exe"; Parameters: """{app}\scripts\stop.vbs"""; WorkingDir: "{app}"; IconFilename: "{app}\web\icons\icon.ico"; Comment: "Vypne Letáčkomat běžící na pozadí"
 Name: "{autoprograms}\Odinstalovat Letáčkomat"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\Letáčkomat"; Filename: "{sys}\wscript.exe"; Parameters: """{app}\scripts\app.vbs"""; WorkingDir: "{app}"; IconFilename: "{app}\web\icons\icon.ico"; Tasks: desktopicon
