@@ -45,6 +45,12 @@ export function buildFilter(query, { skip = [] } = {}) {
     where.push(`d.category IN (${cats.map((_, i) => `@c${i}`).join(',')})`);
     cats.forEach((c, i) => (params[`c${i}`] = c));
   }
+  // podkategorie kupi.cz; bez výběru (prázdný parametr) se bere celá kategorie
+  if (!skip.includes('subcategory') && query.subcategory) {
+    const subs = splitCsv(query.subcategory);
+    where.push(`d.subcategory IN (${subs.map((_, i) => `@sub${i}`).join(',')})`);
+    subs.forEach((s, i) => (params[`sub${i}`] = s));
+  }
   if (query.q) {
     const words = normalize(query.q).split(/\s+/).filter(Boolean).slice(0, 6);
     words.forEach((w, i) => {

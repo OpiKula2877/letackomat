@@ -395,7 +395,7 @@ a { color: inherit; }
 .shop--clear { border-style: dashed; padding-left: 14px; color: var(--ink-soft); }
 .shop--clear:disabled { opacity: 0.5; }
 
-.filters__row { display: grid; grid-template-columns: minmax(180px, 2fr) repeat(3, minmax(130px, 1fr)); gap: 8px; }
+.filters__row { display: grid; grid-template-columns: minmax(180px, 2fr) repeat(4, minmax(130px, 1fr)); gap: 8px; }
 .filters__row input {
   background-color: var(--surface);
   color: var(--ink);
@@ -1201,6 +1201,7 @@ dialog.cmp::backdrop { background: rgba(21, 24, 26, 0.72); backdrop-filter: blur
   transition: border-color 0.12s ease;
 }
 .dd__btn:hover { border-color: var(--ink-soft); }
+.dd__btn:disabled { opacity: 0.5; cursor: default; }
 .dd--open .dd__btn { border-color: var(--ink); }
 .dd__btn::after {
   content: '';

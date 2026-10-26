@@ -4,7 +4,7 @@ Akční ceny ze všech českých obchodů na jednom místě. Funguje jako web i 
 
 **Co umí**
 
-- akce platné v zvolený den nebo období od–do, výběr obchodů, hledání bez diakritiky, kategorie, minimální sleva
+- akce platné v zvolený den nebo období od–do, výběr obchodů, hledání bez diakritiky, kategorie a podkategorie (z kupi.cz), minimální sleva
 - **porovnání cen**: u produktu ceny ve všech obchodech vedle sebe, přepočet na 1 kg / 1 l / 1 ks, nejlevnější varianta a historie cen
 - řazení podle ceny za jednotku (Nejlevnější za jednotku)
 - **nákupní seznam** se sekcemi, odškrtáváním a přepínačem Všechny / Jen v akci; položka zůstává, dokud ji nesmažeš
@@ -95,7 +95,7 @@ Na mobilu k appce přistupuj přes adresu počítače v síti (`HOST=0.0.0.0 npm
 
 | Endpoint | Popis |
 | --- | --- |
-| `GET /api/deals` | Akce platné v daný den. Parametry: `date=YYYY-MM-DD` (výchozí dnes), `to=YYYY-MM-DD` (volitelně konec období, vrátí akce platné alespoň jeden den v rozsahu), `shops=albert,lidl`, `q=šunka`, `category=maso`, `minDiscount=30`, `sort=discount\|price\|unit\|name\|shop`, `limit`, `offset` |
+| `GET /api/deals` | Akce platné v daný den. Parametry: `date=YYYY-MM-DD` (výchozí dnes), `to=YYYY-MM-DD` (volitelně konec období, vrátí akce platné alespoň jeden den v rozsahu), `shops=albert,lidl`, `q=šunka`, `category=maso`, `subcategory=vodka,pivo` (podkategorie kupi.cz), `minDiscount=30`, `sort=discount\|price\|unit\|name\|shop`, `limit`, `offset` |
 | `GET /api/products/:slug?date=&to=` | Porovnání cen produktu: nabídky v obchodech v období (seřazené podle ceny za 1 kg / 1 l / 1 ks, s označením nejlevnější), historie cen z našich dat a statistiky |
 | `GET /api/shops?date=` | Obchody a počet akcí v daný den |
 | `GET /api/days?from=&count=14` | Počty akcí po dnech (pásek dnů) |
@@ -161,6 +161,7 @@ které sbírá letáky všech řetězců na jednom místě (`/slevy/<obchod>`, p
 - **Původní cena** se dopočítá z ceny a procenta slevy, takže může být o desetihaléř vedle.
   Pokud kupi.cz procento slevy neuvádí (časté u Lidlu), zobrazí se jen akční cena.
 - **Kategorie** se určují podle klíčových slov v názvu, takže občas se spletou.
+- **Podkategorie** (třeba Alkohol › Vodka) jsou z kupi.cz. Jednou za den se projdou všechny podkategorie, což je několik set stránek navíc k obchodům. Akce, které kupi.cz v žádné podkategorii nemá, se ukážou jen ve výběru „Všechny podkategorie“.
 - Scraper je slušný: jeden požadavek za 0,8 s, dvakrát denně, s identifikačním User-Agentem.
   Je určen pro osobní použití. Dodržuj podmínky kupi.cz a data dál nešiř.
 - Když kupi.cz změní HTML, parser přestane něco najít. Oprav selektory v

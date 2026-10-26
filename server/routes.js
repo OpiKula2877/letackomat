@@ -10,6 +10,7 @@ import { registerProduct } from './product.js';
 import { registerAlerts } from './watch/routes.js';
 import { buildFilter, SORTS, splitCsv, toItem } from './query.js';
 import { isScraping, runScrapeWithRetry, scrapeProgress } from './scraper/run.js';
+import { subcategoriesStep } from './scraper/subcategories.js';
 import { readPackage } from './update.js';
 import { addDays, isISODate, todayISO } from './util.js';
 
@@ -76,9 +77,20 @@ export function registerRoutes(app, db, { onShutdown, update, alerts, installed 
       .prepare(`SELECT d.category id, COUNT(*) n FROM deals d WHERE ${fCat.where} GROUP BY d.category ORDER BY n DESC`)
       .all(fCat.params)
       .map((r) => ({ id: r.id, label: CATEGORY_LABELS[r.id] ?? r.id, count: r.n }));
+    // podkategorie bez vlastního filtru, jen ty, které v daném výběru mají akce
+    const fSub = buildFilter(req.query, { skip: ['subcategory'] });
+    const subInfo = new Map(db.prepare('SELECT slug, name, parent_slug, parent_name FROM subcategories').all().map((r) => [r.slug, r]));
+    const subcategories = db
+      .prepare(`SELECT d.subcategory slug, COUNT(*) n FROM deals d WHERE ${fSub.where} AND d.subcategory IS NOT NULL GROUP BY d.subcategory`)
+      .all(fSub.params)
+      .map((r) => {
+        const info = subInfo.get(r.slug);
+        return { slug: r.slug, name: info?.name ?? r.slug, parent: info?.parent_slug ?? null, parentName: info?.parent_name ?? '', count: r.n };
+      })
+      .sort((a, b) => a.parentName.localeCompare(b.parentName, 'cs') || a.name.localeCompare(b.name, 'cs'));
 
     const inCart = cartSlugs(db);
-    return { date: f.date, dateTo: f.dateTo, total, limit, offset, items: rows.map((r) => toItem(r, inCart)), facets: { shops, categories } };
+    return { date: f.date, dateTo: f.dateTo, total, limit, offset, items: rows.map((r) => toItem(r, inCart)), facets: { shops, categories, subcategories } };
   });
 
   /** Počet akcí pro každý den v řadě (pásek dnů v UI). Respektuje filtry obchodů/hledání. */
@@ -145,7 +157,7 @@ export function registerRoutes(app, db, { onShutdown, update, alerts, installed 
     if (!isTrusted(req)) return reply.code(403).send({ error: 'jen z tohoto počítače' });
     if (isScraping()) return reply.code(409).send({ error: 'scrape už běží' });
     const shops = splitCsv(req.query.shops);
-    runScrapeWithRetry(db, { shops: shops.length ? shops : undefined, log: (m) => app.log.info(m) }).catch((e) => app.log.error(e));
+    runScrapeWithRetry(db, { shops: shops.length ? shops : undefined, log: (m) => app.log.info(m), refreshSubs: subcategoriesStep }).catch((e) => app.log.error(e));
     return reply.code(202).send({ started: true });
   });
 }

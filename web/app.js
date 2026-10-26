@@ -16,6 +16,7 @@ const state = {
   shops: new Set(),
   q: '',
   category: '',
+  subcategory: '', // podkategorie kupi.cz; prázdné = všechny podkategorie výběru
   minDiscount: '0',
   sort: 'discount',
   view: 'all', // 'all' = všechny akce, 'cart' = nákupní seznam
@@ -98,6 +99,7 @@ function params(extra = {}) {
   if (state.shops.size) p.set('shops', [...state.shops].join(','));
   if (state.q) p.set('q', state.q);
   if (state.category) p.set('category', state.category);
+  if (state.subcategory) p.set('subcategory', state.subcategory);
   if (Number(state.minDiscount) > 0) p.set('minDiscount', state.minDiscount);
   for (const [k, v] of Object.entries(extra)) p.set(k, v);
   return p;
@@ -120,6 +122,7 @@ async function fetchDayCounts(from, count) {
   p.delete('date');
   p.delete('to');
   p.delete('category');
+  p.delete('subcategory');
   return (await api(`/api/days?${p}`)).days;
 }
 
@@ -332,6 +335,29 @@ function renderCategories(cats) {
     ...cats.map((c) => new Option(`${c.label} (${c.count})`, c.id)),
   );
   sel.value = cats.some((c) => c.id === state.category) ? state.category : '';
+}
+
+/** Podkategorie kupi.cz: jen ty, které v aktuálním výběru mají akce. Bez výběru kategorie připíše nadřazenou. */
+function renderSubcategories(subs) {
+  const sel = $('subcategory');
+  const withParent = !state.category;
+  sel.replaceChildren(
+    new Option('Všechny podkategorie', ''),
+    ...subs.map((s) => new Option(`${withParent ? `${s.parentName}: ` : ''}${s.name} (${s.count})`, s.slug)),
+  );
+  if (state.subcategory && !subs.some((s) => s.slug === state.subcategory)) {
+    // vybraná podkategorie v novém výběru nemá žádnou akci: vrátit se na všechny a načíst znovu
+    state.subcategory = '';
+    sel.value = '';
+    load(true);
+    return;
+  }
+  sel.value = state.subcategory;
+  const none = !subs.length;
+  sel.disabled = none;
+  sel.title = none ? 'Podkategorie se doplní při dalším stahování akcí' : '';
+  const btn = sel.nextElementSibling?.querySelector('.dd__btn');
+  if (btn) btn.disabled = none;
 }
 
 /* ——— vlastní dropdown (rozbalovací seznam nativního <select> nejde obarvit) ——— */
@@ -1006,6 +1032,7 @@ async function load(reset) {
     if (id !== reqId) return;
     renderShops(data.facets.shops);
     renderCategories(data.facets.categories);
+    renderSubcategories(data.facets.subcategories);
     const grid = $('grid');
     if (reset) grid.replaceChildren();
     data.items.forEach((d) => grid.append(card(d)));
@@ -1161,8 +1188,9 @@ $('q').addEventListener('input', (e) => {
     renderDays();
   }, 250);
 });
-for (const id of ['category', 'minDiscount', 'sort']) enhanceSelect($(id));
-$('category').addEventListener('change', (e) => { state.category = e.target.value; load(true); });
+for (const id of ['category', 'subcategory', 'minDiscount', 'sort']) enhanceSelect($(id));
+$('category').addEventListener('change', (e) => { state.category = e.target.value; state.subcategory = ''; load(true); });
+$('subcategory').addEventListener('change', (e) => { state.subcategory = e.target.value; load(true); });
 $('minDiscount').addEventListener('change', (e) => { state.minDiscount = e.target.value; load(true); renderDays(); });
 $('sort').addEventListener('change', (e) => { state.sort = e.target.value; persist(); load(true); });
 $('moreBtn').addEventListener('click', () => load(false));

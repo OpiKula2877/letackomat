@@ -44,6 +44,18 @@ export function openDb(file = process.env.DB_FILE ?? join(dataDir(), 'letackomat
     CREATE INDEX IF NOT EXISTS idx_deals_valid ON deals(valid_from, valid_to);
     CREATE INDEX IF NOT EXISTS idx_deals_product ON deals(product_slug);
 
+    -- podkategorie kupi.cz (třeba Alkohol > Vodka) a to, ke které podkategorii patří který produkt
+    CREATE TABLE IF NOT EXISTS subcategories (
+      slug TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      parent_slug TEXT NOT NULL,
+      parent_name TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS product_subcategory (
+      product_id INTEGER PRIMARY KEY,
+      subcategory TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS favorites (
       product_slug TEXT PRIMARY KEY,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -91,7 +103,15 @@ export function openDb(file = process.env.DB_FILE ?? join(dataDir(), 'letackomat
   `);
   migrateFavoritesToCart(db);
   ensureUnitColumns(db);
+  ensureSubcategoryColumn(db);
   return db;
+}
+
+/** Podkategorie u akce: přidá sloupec a index (starší databáze ho dostane doplněný, data se nemění). */
+export function ensureSubcategoryColumn(db) {
+  const cols = db.prepare('PRAGMA table_info(deals)').all().map((c) => c.name);
+  if (!cols.includes('subcategory')) db.exec('ALTER TABLE deals ADD COLUMN subcategory TEXT');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_deals_subcategory ON deals(subcategory)');
 }
 
 /** Cena za 1 kg / 1 l / 1 ks (pro porovnání): přidá sloupce a jednorázově dopočítá starší záznamy. */

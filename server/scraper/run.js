@@ -2,6 +2,7 @@
 import { fileURLToPath } from 'node:url';
 import { makeWriter, openDb, setMeta } from '../db.js';
 import { DEFAULT_SHOPS, scrapeShop } from './kupi.js';
+import { applySubcategories, subcategoriesStep } from './subcategories.js';
 import { sleep, todayISO } from '../util.js';
 
 let running = false;
@@ -28,7 +29,11 @@ export function scrapeProgress() {
   return { ...rest, failed: failed.size };
 }
 
-export async function runScrape(db, shops = DEFAULT_SHOPS, log = console.log, { scrape = scrapeShop } = {}) {
+/**
+ * `refreshSubs(db, log)` obnoví podkategorie z kupi.cz (když jsou staré); bez něj se jen doplní podkategorie
+ * u akcí z dřívějšího mapování. Spouští se až po stažení obchodů, aby selhání podkategorií neshodilo akce.
+ */
+export async function runScrape(db, shops = DEFAULT_SHOPS, log = console.log, { scrape = scrapeShop, refreshSubs = null } = {}) {
   if (running) throw new Error('Scrape už běží');
   running = true;
   // samostatné stažení si průběh vede samo; při opakování ho vede obálka runScrapeWithRetry
@@ -72,6 +77,17 @@ export async function runScrape(db, shops = DEFAULT_SHOPS, log = console.log, { 
     }
     // „hotovo“ se zapíše jen když se aspoň něco stáhlo; po výpadku sítě se tak server za chvíli zkusí znovu
     if (Object.values(summary).some((s) => !s.error)) setMeta(db, 'last_scrape', new Date().toISOString());
+    applySubcategories(db);
+    if (refreshSubs) {
+      progress.current = 'Podkategorie';
+      progress.page = 0;
+      try {
+        await refreshSubs(db, log);
+      } catch (e) {
+        log(`podkategorie: ${e.message}`);
+      }
+      applySubcategories(db);
+    }
     setMeta(db, 'last_scrape_summary', JSON.stringify(summary));
   } finally {
     running = false;
@@ -87,7 +103,7 @@ let retrying = null;
  * Stažení s opakováním: obchody, které selhaly (výpadek sítě, spánek počítače), se po chvíli zkusí znovu.
  * Běží-li už jedno takové stahování, vrátí se jeho výsledek.
  */
-export function runScrapeWithRetry(db, { shops = DEFAULT_SHOPS, log = console.log, scrape, retryMs = 10 * 60_000, maxRetries = 5, wait = sleep } = {}) {
+export function runScrapeWithRetry(db, { shops = DEFAULT_SHOPS, log = console.log, scrape, refreshSubs = null, retryMs = 10 * 60_000, maxRetries = 5, wait = sleep } = {}) {
   if (retrying) return retrying;
   retrying = (async () => {
     const summary = {};
@@ -98,7 +114,7 @@ export function runScrapeWithRetry(db, { shops = DEFAULT_SHOPS, log = console.lo
     try {
       for (;;) {
         attempts++;
-        Object.assign(summary, await runScrape(db, todo, log, { scrape }));
+        Object.assign(summary, await runScrape(db, todo, log, { scrape, refreshSubs }));
         todo = Object.keys(summary).filter((s) => summary[s].error);
         if (!todo.length || attempts > maxRetries) break;
         log(`stahování: ${todo.length} obchodů selhalo, zkusím znovu za ${Math.round(retryMs / 60_000)} min`);
@@ -119,7 +135,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const shops = args.length ? args : process.env.SHOPS?.split(',') ?? DEFAULT_SHOPS;
   const db = openDb();
   console.log(`Scrape: ${shops.join(', ')}`);
-  const summary = await runScrape(db, shops);
+  const summary = await runScrape(db, shops, console.log, { refreshSubs: subcategoriesStep });
   const total = Object.values(summary).reduce((a, s) => a + (s.deals ?? 0), 0);
   console.log(`Hotovo, celkem ${total} akcí.`);
 }
