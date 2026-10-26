@@ -87,7 +87,7 @@ npm test
 
 ### Instalace jako appka
 
-V Chrome/Edge: ikona instalace v adresním řádku, nebo tlačítko "Nainstalovat appku" v záhlaví.
+V Chrome/Edge: ikona instalace v adresním řádku, nebo tlačítko "Nainstalovat appku" v záhlaví. Aplikace nainstalovaná instalátorem už zástupce na ploše má, a proto se tlačítko u ní nezobrazuje.
 Na mobilu k appce přistupuj přes adresu počítače v síti (`HOST=0.0.0.0 npm start`) nebo ji nasaď na hosting
 (service worker na jiné adrese než `localhost` vyžaduje HTTPS).
 

@@ -1138,6 +1138,7 @@ async function init() {
   if (!state.health) showDown();
   else {
     $('stopBtn').hidden = !state.health.canShutdown;
+    if (state.health.installed) $('installBtn').hidden = true; // kdyby událost přišla dřív, než přišlo zdraví serveru
     document.querySelector('.brand').title = `Verze ${state.health.version}`;
     initUpdate(); // na pozadí, nic nezdržuje
     await initAlerts(); // rychlé; potřebuje se vědět, jestli se má ukázat záložka a zvonky
@@ -1790,7 +1791,8 @@ let deferredPrompt;
 window.addEventListener('beforeinstallprompt', (e) => {
   e.preventDefault();
   deferredPrompt = e;
-  $('installBtn').hidden = false;
+  // nainstalovaná aplikace (z instalátoru) už má zástupce na ploše, druhá instalace z prohlížeče by ho zdvojila
+  if (!state.health?.installed) $('installBtn').hidden = false;
 });
 $('installBtn').addEventListener('click', async () => {
   if (!deferredPrompt) return;

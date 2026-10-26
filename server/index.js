@@ -19,7 +19,7 @@ import { repairAutostart } from './watch/autostart.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
-export function buildApp(db, { logger = false, onShutdown, update, alerts } = {}) {
+export function buildApp(db, { logger = false, onShutdown, update, alerts, installed } = {}) {
   // forceCloseConnections: otevřené spojení prohlížeče (keep-alive) nesmí vypnutí zablokovat
   const app = Fastify({ logger, forceCloseConnections: true });
   // prázdné tělo s hlavičkou application/json (např. POST bez dat) je v pořádku, ne chyba 400
@@ -33,7 +33,7 @@ export function buildApp(db, { logger = false, onShutdown, update, alerts } = {}
       done(err, undefined);
     }
   });
-  registerRoutes(app, db, { onShutdown, update, alerts });
+  registerRoutes(app, db, { onShutdown, update, alerts, installed });
   app.register(fastifyStatic, { root: resolve(here, '..', 'web'), maxAge: 0 });
   return app;
 }

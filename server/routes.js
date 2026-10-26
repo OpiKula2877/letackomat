@@ -4,6 +4,7 @@ import { cartSlugs, registerCart } from './cart.js';
 import { getMeta } from './db.js';
 import { installId } from './install.js';
 import { isLocal, isTrusted } from './local.js';
+import { isInstalled } from './paths.js';
 import { registerPrefs } from './prefs.js';
 import { registerProduct } from './product.js';
 import { registerAlerts } from './watch/routes.js';
@@ -12,7 +13,7 @@ import { isScraping, runScrapeWithRetry, scrapeProgress } from './scraper/run.js
 import { readPackage } from './update.js';
 import { addDays, isISODate, todayISO } from './util.js';
 
-export function registerRoutes(app, db, { onShutdown, update, alerts } = {}) {
+export function registerRoutes(app, db, { onShutdown, update, alerts, installed } = {}) {
   const version = readPackage().version;
   const id = installId();
 
@@ -20,6 +21,7 @@ export function registerRoutes(app, db, { onShutdown, update, alerts } = {}) {
     ok: true,
     version,
     installId: id,
+    installed: installed ?? isInstalled(), // nainstalováno instalátorem: tlačítko Nainstalovat appku se pak nenabízí
     today: todayISO(),
     lastScrape: getMeta(db, 'last_scrape'),
     scraping: isScraping(),
