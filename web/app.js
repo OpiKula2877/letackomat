@@ -29,7 +29,7 @@ try {
   const saved = JSON.parse(localStorage.getItem('letackomat') ?? '{}');
   if (Array.isArray(saved.shops)) state.shops = new Set(saved.shops);
   if (saved.sort) state.sort = saved.sort;
-  if (saved.view === 'cart' || saved.view === 'alerts') state.view = saved.view;
+  if (['cart', 'alerts', 'settings'].includes(saved.view)) state.view = saved.view;
   if (saved.onlySale === true) state.cart.onlySale = true;
 } catch { /* localStorage nemusí být dostupné */ }
 
@@ -40,6 +40,41 @@ function persist() {
       JSON.stringify({ shops: [...state.shops], sort: state.sort, view: state.view, onlySale: state.cart.onlySale }),
     );
   } catch { /* ignoruj */ }
+  saveShops();
+}
+
+/* ——— předvolby: vybrané obchody se ukládají na server, takže zůstanou i po restartu ——— */
+let prefsLoaded = false; // dokud nepřijdou předvolby ze serveru, nic se nezapisuje (nepřepsal by se starší výběr)
+let savedShops = ''; // výběr, který je na serveru (slugy seřazené a spojené čárkou)
+const shopsKey = (set) => [...set].sort().join(',');
+
+async function loadPrefs() {
+  try {
+    const prefs = await api('/api/prefs');
+    const onServer = Array.isArray(prefs.shops);
+    if (onServer) state.shops = new Set(prefs.shops);
+    prefsLoaded = true;
+    // první spuštění po aktualizaci: výběr z tohoto prohlížeče se přenese na server
+    savedShops = onServer ? shopsKey(state.shops) : '';
+    saveShops();
+  } catch {
+    // bez serveru zůstane výběr z prohlížeče a nic se neukládá
+  }
+  alertsState.shops = new Set(state.shops);
+}
+
+function saveShops() {
+  if (!prefsLoaded) return;
+  const key = shopsKey(state.shops);
+  if (key === savedShops) return;
+  savedShops = key;
+  fetch('/api/prefs', {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json', 'x-letackomat': '1' },
+    body: JSON.stringify({ shops: [...state.shops] }),
+  })
+    .then((res) => { if (!res.ok) throw new Error(`chyba ${res.status}`); })
+    .catch(() => { savedShops = ''; toast('Výběr obchodů se nepodařilo uložit na server.'); });
 }
 
 const fmtPrice = (n) =>
@@ -959,6 +994,7 @@ let reqId = 0;
 async function load(reset) {
   if (state.view === 'cart') return loadCart();
   if (state.view === 'alerts') return loadAlerts();
+  if (state.view === 'settings') return loadSettings();
   if (reset) {
     state.offset = 0;
     $('grid').replaceChildren(...Array.from({ length: 8 }, () => Object.assign(document.createElement('div'), { className: 'skeleton' })));
@@ -1065,9 +1101,10 @@ function setView(view) {
   for (const el of [document.querySelector('.filters'), $('summary'), $('grid'), document.querySelector('.more')]) el.hidden = !deals;
   $('cart').hidden = view !== 'cart';
   $('alerts').hidden = view !== 'alerts';
-  document.querySelector('.days').hidden = view === 'alerts'; // upozornění na dni nezávisí
+  $('settings').hidden = view !== 'settings';
+  document.querySelector('.days').hidden = view === 'alerts' || view === 'settings'; // upozornění a nastavení na dni nezávisí
   load(true);
-  if (view !== 'alerts') renderDays();
+  if (view !== 'alerts' && view !== 'settings') renderDays();
 }
 
 /** Přečte #alerts nebo #alerts/ID z adresy, adresu vyčistí a vrátí true, když se má otevřít záložka Upozornění. */
@@ -1105,6 +1142,8 @@ async function init() {
     initUpdate(); // na pozadí, nic nezdržuje
     await initAlerts(); // rychlé; potřebuje se vědět, jestli se má ukázat záložka a zvonky
   }
+
+  await loadPrefs(); // předvolené obchody ze serveru, dřív než se něco vykreslí
 
   // kliknutí na Windows oznámení otevře aplikaci s #alerts (nebo #alerts/ID jednoho pravidla)
   if (consumeAlertsHash()) state.view = 'alerts';
@@ -1344,6 +1383,66 @@ function renderAlertShops() {
   );
 }
 
+/* ——— nastavení: vybrané obchody (stejný výběr jako v seznamu akcí) ——— */
+async function loadSettings() {
+  const t = state.today ?? new Date().toISOString().slice(0, 10);
+  try {
+    const { shops } = await api(`/api/shops?date=${t}&to=${addDays(t, 14)}`);
+    // obchod vybraný dřív, který v tomhle období nemá akce, se přesto ukáže, ať jde zrušit
+    const listed = new Set(shops.map((s) => s.slug));
+    const unlisted = [...state.shops].filter((slug) => !listed.has(slug)).map((slug) => knownShops.get(slug) ?? { slug, name: slug, logo: null });
+    renderSettingsShops([...shops, ...unlisted]);
+  } catch (e) {
+    $('setShops').innerHTML = `<div class="empty"><strong>Obchody se nepodařilo načíst</strong>${esc(e.message)}</div>`;
+  }
+}
+
+function renderSettingsShops(list) {
+  const chips = list.map((s) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'shop';
+    b.setAttribute('aria-pressed', String(state.shops.has(s.slug)));
+    const ph = `<span class="shop__ph">${esc(s.name.slice(0, 2))}</span>`;
+    b.innerHTML = `${s.logo ? `<img src="${esc(s.logo)}" alt="" loading="lazy" width="26" height="26">` : ph}<span>${esc(s.name)}</span>`;
+    b.querySelector('img')?.addEventListener('error', (e) => e.target.replaceWith(Object.assign(document.createElement('span'), { className: 'shop__ph', textContent: s.name.slice(0, 2) })));
+    b.addEventListener('click', () => {
+      if (state.shops.has(s.slug)) state.shops.delete(s.slug);
+      else state.shops.add(s.slug);
+      b.setAttribute('aria-pressed', String(state.shops.has(s.slug)));
+      shopsChanged();
+    });
+    return b;
+  });
+  const clear = document.createElement('button');
+  clear.type = 'button';
+  clear.className = 'shop shop--clear';
+  clear.textContent = 'Zrušit výběr';
+  clear.addEventListener('click', () => {
+    state.shops.clear();
+    shopsChanged();
+    renderSettingsShops(list);
+  });
+  $('setShops').replaceChildren(...chips, clear);
+  updateShopsStatus();
+}
+
+/** Výběr obchodů se změnil: uložit na server a předvyplnit nová pravidla upozornění. */
+function shopsChanged() {
+  persist();
+  alertsState.shops = new Set(state.shops);
+  updateShopsStatus();
+}
+
+function updateShopsStatus() {
+  const n = state.shops.size;
+  $('setStatus').textContent = n
+    ? `Vybráno ${n} ${shopsWord(n)}. Seznam akcí ukazuje jen tyto obchody.`
+    : 'Nic není vybrané, seznam akcí ukazuje všechny obchody.';
+  const clear = document.querySelector('#setShops .shop--clear');
+  if (clear) clear.disabled = !n;
+}
+
 /** Podmínky z formuláře; null, když ještě není co hlídat. */
 function formRule() {
   const kind = alertsState.kind;
@@ -1451,7 +1550,7 @@ $('alForm').addEventListener('submit', async (e) => {
     $('alMin').value = '';
     $('alMin').dispatchEvent(new Event('sync'));
     alertsState.picked = null;
-    alertsState.shops.clear();
+    alertsState.shops = new Set(state.shops); // nová pravidla začínají s předvybranými obchody
     renderAlertShops();
     $('alPreview').textContent = '';
     $('alAdd').disabled = true;

@@ -4,6 +4,7 @@ import { cartSlugs, registerCart } from './cart.js';
 import { getMeta } from './db.js';
 import { installId } from './install.js';
 import { isLocal, isTrusted } from './local.js';
+import { registerPrefs } from './prefs.js';
 import { registerProduct } from './product.js';
 import { registerAlerts } from './watch/routes.js';
 import { buildFilter, SORTS, splitCsv, toItem } from './query.js';
@@ -102,6 +103,7 @@ export function registerRoutes(app, db, { onShutdown, update, alerts } = {}) {
 
   registerCart(app, db);
   registerProduct(app, db);
+  registerPrefs(app, db);
   if (alerts) registerAlerts(app, db, alerts);
 
   /** Je k dispozici novější verze na GitHubu? (výsledek se cachuje, ?force=1 jen z tohoto počítače) */

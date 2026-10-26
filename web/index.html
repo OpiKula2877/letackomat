@@ -23,6 +23,7 @@
         <button class="tab" data-view="all" aria-pressed="true">Všechny akce</button>
         <button class="tab" data-view="cart" aria-pressed="false">Nákupní seznam <span class="tab__n" id="cartCount">0</span></button>
         <button class="tab" data-view="alerts" aria-pressed="false" id="alertsTab" hidden>Upozornění <span class="tab__n" id="alertCount">0</span></button>
+        <button class="tab" data-view="settings" aria-pressed="false">Nastavení</button>
       </nav>
       <div class="updwrap" id="updWrap" hidden>
         <button class="updbtn" id="updBtn" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="upd" aria-label="Je dostupná aktualizace" title="Je dostupná aktualizace">
@@ -145,6 +146,15 @@
 
       <h2 class="al-h">Moje pravidla <span class="al-h__n" id="alCount"></span></h2>
       <div class="al-list" id="alList"></div>
+    </section>
+
+    <section class="settings" id="settings" hidden aria-label="Nastavení">
+      <div class="al-card">
+        <h2>Moje obchody</h2>
+        <p class="al-hint">Vyber obchody, které tě zajímají. Výběr se uloží v aplikaci a zůstane i po restartu počítače. Akce se ukážou jen z vybraných obchodů a nová pravidla upozornění je budou mít předvybrané. Když nic nevybereš, uvidíš všechny obchody.</p>
+        <div class="shops" id="setShops" role="group" aria-label="Moje obchody"></div>
+        <p class="al-preview" id="setStatus" aria-live="polite"></p>
+      </div>
     </section>
   </main>
 

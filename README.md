@@ -9,6 +9,7 @@ Akční ceny ze všech českých obchodů na jednom místě. Funguje jako web i 
 - řazení podle ceny za jednotku (Nejlevnější za jednotku)
 - **nákupní seznam** se sekcemi, odškrtáváním a přepínačem Všechny / Jen v akci; položka zůstává, dokud ji nesmažeš
 - **upozornění**: Windows oznámení na pozadí, když je ve slevě hlídané slovo v názvu (třeba Jägermeister) nebo konkrétní produkt
+- **nastavení**: vybrané obchody se uloží v databázi aplikace, takže zůstanou i po restartu počítače; seznam akcí ukazuje jen je a nová pravidla upozornění je mají předvybrané
 
 ## Stažení a spuštění (Windows)
 
@@ -109,6 +110,7 @@ Na mobilu k appce přistupuj přes adresu počítače v síti (`HOST=0.0.0.0 npm
 | `POST /api/shutdown` | Vypne server (jen z tohoto počítače, vyžaduje hlavičku `X-Letackomat: 1`) |
 | `GET /api/update` | Je na GitHubu novější verze? (výsledek se na 15 minut cachuje, `?force=1` jen z tohoto počítače) |
 | `GET /api/alerts`, `PUT /api/alerts/settings` | Stav upozornění a zapnutí / vypnutí oznámení na pozadí (jen z tohoto počítače) |
+| `GET /api/prefs`, `PUT /api/prefs` | Předvolby: `shops` (vybrané obchody, `null` = ještě nenastaveno); zápis jen z tohoto počítače s hlavičkou `X-Letackomat: 1` |
 | `GET/POST /api/alerts/rules`, `PATCH/DELETE /api/alerts/rules/:id` | Pravidla hlídače: `kind` (`keyword` / `product`), `value`, `minDiscount`, `maxPrice`, `shops`, `enabled` |
 | `GET /api/alerts/preview` | Co by pravidlo teď chytilo, bez uložení |
 | `GET /api/alerts/rules/:id/matches` | Všechny akce, které pravidlu teď odpovídají (rozbalení pravidla v aplikaci) |
