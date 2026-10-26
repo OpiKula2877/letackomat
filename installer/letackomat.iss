@@ -83,7 +83,7 @@ Root: HKCU; Subkey: "Software\Classes\AppUserModelId\Letackomat"; Flags: dontcre
 
 [Run]
 ; po ruční instalaci nabídne spuštění, po tiché aktualizaci z aplikace se spustí samo
-Filename: "{sys}\wscript.exe"; Parameters: """{app}\scripts\app.vbs"""; Description: "Spustit Letáčkomat"; Flags: nowait postinstall skipifsilent runasoriginaluser
+Filename: "{sys}\wscript.exe"; Parameters: """{app}\scripts\app.vbs"""; Description: "Spustit Letáčkomat (otevře se jako okno aplikace)"; Flags: nowait postinstall skipifsilent runasoriginaluser
 Filename: "{sys}\wscript.exe"; Parameters: """{app}\scripts\start-hidden.vbs"""; Flags: nowait runasoriginaluser; Check: WizardSilent
 
 [UninstallRun]

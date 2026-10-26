@@ -1090,26 +1090,23 @@ dialog.cmp::backdrop { background: rgba(21, 24, 26, 0.72); backdrop-filter: blur
   .rule__icon { width: 38px; height: 38px; font-size: 1.3rem; }
 }
 
-/* ——— aktualizace: nenápadné tlačítko 1:1, karta a okno průběhu ——— */
+/* ——— aktualizace: viditelné tlačítko s novou verzí, karta a okno průběhu ——— */
 .updwrap { position: relative; }
 .updbtn {
-  position: relative;
-  width: 40px; height: 40px;
-  display: grid; place-items: center;
-  border-radius: 50%;
-  border: 1px solid var(--chip-line);
-  background: transparent;
-  color: inherit;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 16px 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--solid-bg);
+  color: var(--solid-fg);
+  font-weight: 800;
+  font-stretch: 88%;
+  white-space: nowrap;
 }
-.updbtn:hover, .updbtn[aria-expanded='true'] { border-color: currentColor; }
-.updbtn__dot {
-  position: absolute;
-  top: 3px; right: 3px;
-  width: 10px; height: 10px;
-  border-radius: 50%;
-  background: var(--sale-bg);
-  border: 2px solid var(--head-bg);
-}
+.updbtn:hover, .updbtn[aria-expanded='true'] { filter: brightness(0.94); }
 
 .upd {
   position: absolute;

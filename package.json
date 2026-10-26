@@ -1,6 +1,6 @@
 {
   "name": "letackomat",
-  "version": "1.4.3",
+  "version": "1.4.4",
   "description": "Akční letáky všech českých obchodů na jednom místě: výběr dne, nákupní seznam, webová aplikace (PWA)",
   "license": "MIT",
   "private": true,

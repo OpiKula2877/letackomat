@@ -1675,6 +1675,7 @@ async function initUpdate() {
   showUpdateResult(st.lastResult);
   if (!st.enabled || !st.available) return;
   $('updWrap').hidden = false;
+  $('updLabel').textContent = `Nová verze ${st.latest}`;
   $('updBtn').title = `Je dostupná aktualizace ${st.latest}`;
   $('updBtn').setAttribute('aria-label', `Je dostupná aktualizace ${st.latest}`);
   renderUpd(st);
