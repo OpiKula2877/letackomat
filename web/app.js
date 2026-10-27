@@ -1302,6 +1302,7 @@ function renderAlerts() {
   if (d.lastError) warns.push(`Poslední oznámení se nepodařilo odeslat: ${d.lastError}`);
   $('alWarn').hidden = !warns.length;
   $('alWarn').textContent = warns.join(' ');
+  $('alBrowser').hidden = !d.browserWindowAtLogin;
 
   $('alCount').textContent = d.rules.length ? String(d.rules.length) : '';
   const list = $('alList');

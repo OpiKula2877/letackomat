@@ -1,6 +1,6 @@
 // Spuštění aplikace na pozadí po přihlášení do Windows: jeden malý skript ve složce "Po spuštění".
 // Vytváří se jen na výslovné zapnutí oznámení v aplikaci a zapnutím/vypnutím se mazat.
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const FILE = 'Letackomat-na-pozadi.vbs';
@@ -10,6 +10,27 @@ export function startupDir() {
 }
 
 export const autostartSupported = () => process.platform === 'win32' || Boolean(process.env.LETACKOMAT_STARTUP_DIR);
+
+/**
+ * Zástupce, který Edge vytvoří u webové aplikace se spuštěním po přihlášení: pak se při každém přihlášení
+ * otevře okno Letáčkomat (i když server běží na pozadí). Vrací jména souborů, prázdné pole = nic.
+ */
+export function browserLoginShortcuts() {
+  if (!autostartSupported()) return [];
+  let names;
+  try {
+    names = readdirSync(startupDir());
+  } catch {
+    return [];
+  }
+  // zástupce ukládá argumenty v UTF-16, starší v jednobajtovém kódování; hledáme obojí
+  const needles = [Buffer.from('app-run-on-os-login', 'utf16le'), Buffer.from('app-run-on-os-login', 'latin1')];
+  return names.filter((name) => {
+    if (!name.toLowerCase().endsWith('.lnk') || !/letáčkomat|letackomat/i.test(name)) return false;
+    const bytes = readFileSync(join(startupDir(), name));
+    return needles.some((needle) => bytes.includes(needle));
+  });
+}
 export const autostartFile = () => join(startupDir(), FILE);
 export const autostartInstalled = () => existsSync(autostartFile());
 

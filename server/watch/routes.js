@@ -1,5 +1,6 @@
 // API upozornění. Čtení jen z tohoto počítače, změny navíc s hlavičkou X-Letackomat (viz server/local.js).
 import { isLocal, isTrusted } from '../local.js';
+import { autostartSupported, browserLoginShortcuts } from './autostart.js';
 import { todayISO } from '../util.js';
 import {
   countMatches, createRule, deleteRule, findProductRule, getRule, listRules, matchesFor, normalizeRule, updateRule,
@@ -34,6 +35,8 @@ export function registerAlerts(app, db, alerts) {
   app.get('/api/alerts', handler(false, async (req) => ({
     ...(await alerts.status({ withSetting: req.query.setting === '1' })),
     rules: listRules(db).map(withMatches),
+    // Edge při každém přihlášení otevře okno aplikace; server to nepotřebuje, ale uživatel to vidí
+    browserWindowAtLogin: autostartSupported() && browserLoginShortcuts().length > 0,
   })));
 
   app.get('/api/alerts/watched', handler(false, async () => ({
