@@ -1046,7 +1046,9 @@ async function load(reset) {
       }`
       : '';
     if (!data.total && reset) {
-      if (state.health && state.health.deals === 0) showFirstData(grid);
+      const scraping = Boolean(state.health?.progress && state.health.progress.phase !== 'idle');
+      if (scraping && !state.health.deals) grid.innerHTML = `<div class="empty"><strong>Akce se právě stahují</strong>Jakmile se stáhne první obchod, objeví se tady.</div>`;
+      else if (!state.health?.deals) showFirstData(grid);
       else grid.innerHTML = `<div class="empty"><strong>V tomto termínu nic není</strong>Zkus jiný den nebo období, zruš filtry nebo vyber další obchody.</div>`;
     }
   } catch (e) {
@@ -1061,62 +1063,56 @@ const plural = (n) => (n === 1 ? 'akce' : n >= 2 && n <= 4 ? 'akce' : 'akcí');
 /* ——— první data: ukazatel stahování ——— */
 const shopsWord = (n) => (n === 1 ? 'obchod' : n >= 2 && n <= 4 ? 'obchody' : 'obchodů');
 
-/** Obsah rámečku podle průběhu stahování ze serveru (`/api/health`). */
-function firstDataView(h) {
-  const p = h.progress ?? { phase: 'idle' };
-  if (p.phase === 'running' || p.phase === 'waiting') {
-    // hotové obchody jsou přesně, rozdělaný se počítá odhadem podle stránek (obchod má zhruba 10 stránek), ať ukazatel nestojí
-    const partial = p.phase === 'running' ? Math.min(p.page / 10, 0.9) : 0;
-    const pct = p.total ? Math.min(99, Math.round(((p.done + partial) / p.total) * 100)) : 0;
-    const where = p.phase === 'waiting'
-      ? `Něco se nepovedlo (${p.failed} ${shopsWord(p.failed)}), zkusím to znovu za ${Math.max(1, Math.ceil((p.retryAt - Date.now()) / 60_000))} min.`
-      : p.current ? `Teď: ${esc(p.current)}${p.page ? `, stránka ${p.page}` : ''}` : 'Připravuju stahování…';
-    return `<strong>${p.phase === 'waiting' ? 'Stahování čeká na další pokus' : 'Stahují se první data'}</strong>
-      <div class="prog" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}" aria-label="Průběh stahování"><span style="width:${pct}%"></span></div>
-      <p class="prog__txt"><b>${p.done} z ${p.total}</b> ${shopsWord(p.total)} · ${pct} % · ${p.deals.toLocaleString('cs-CZ')} ${plural(p.deals)}</p>
-      <p class="prog__where">${where}</p>`;
-  }
-  if (h.deals > 0) {
-    return `<strong>Akce jsou stažené</strong>Je jich ${h.deals.toLocaleString('cs-CZ')}. Obnov stránku a uvidíš je.
-      <div class="empty__act"><button class="empty__btn" type="button" data-act="reload">Obnovit</button></div>`;
-  }
-  return `<strong>Zatím tu nejsou žádná data</strong>Stáhni akce z kupi.cz, potrvá to pár minut.
-    <div class="empty__act"><button class="empty__btn" type="button" data-act="scrape">Stáhnout akce</button></div>`;
+/** Obsah pruhu nad seznamem podle průběhu stahování ze serveru (`/api/health`). */
+function progressView(p) {
+  // hotové obchody jsou přesně, rozdělaný se počítá odhadem podle stránek (obchod má zhruba 10 stránek), ať ukazatel nestojí
+  const partial = p.phase === 'running' ? Math.min(p.page / 10, 0.9) : 0;
+  const pct = p.total ? Math.min(99, Math.round(((p.done + partial) / p.total) * 100)) : 0;
+  const where = p.phase === 'waiting'
+    ? `Něco se nepovedlo (${p.failed} ${shopsWord(p.failed)}), zkusím to znovu za ${Math.max(1, Math.ceil((p.retryAt - Date.now()) / 60_000))} min.`
+    : p.current ? `Teď: ${esc(p.current)}${p.page ? `, stránka ${p.page}` : ''}` : 'Připravuju stahování…';
+  return `<strong>${p.phase === 'waiting' ? 'Stahování čeká na další pokus' : 'Stahují se akce, seznam se doplňuje sám'}</strong>
+    <div class="prog" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}" aria-label="Průběh stahování"><span style="width:${pct}%"></span></div>
+    <p class="prog__txt"><b>${p.done} z ${p.total}</b> ${shopsWord(p.total)} · ${pct} % · ${p.deals.toLocaleString('cs-CZ')} ${plural(p.deals)}</p>
+    <p class="prog__where">${where}</p>`;
 }
 
-/** Místo prázdné stránky ukáže, kolik stahování zbývá; po dokončení nabídne tlačítko Obnovit. */
-function showFirstData(grid) {
-  const box = Object.assign(document.createElement('div'), { className: 'empty empty--first' });
-  box.setAttribute('aria-live', 'polite');
-  grid.replaceChildren(box);
-  let last = '';
-  const paint = (h) => {
-    const html = firstDataView(h);
-    if (html !== last) box.innerHTML = last = html; // stejný obsah se nepřekresluje, ať neblikají tlačítka
-  };
-  paint(state.health);
-  box.addEventListener('click', async (e) => {
-    const act = e.target.closest('[data-act]')?.dataset.act;
-    if (act === 'reload') location.reload();
-    if (act === 'scrape') {
-      try { await alertsApi('POST', '/api/scrape'); } catch (err) { toast(`Stahování se nepodařilo spustit: ${err.message}`); return; }
-      poll();
-    }
-  });
-  let timer = null;
-  async function poll() {
-    clearTimeout(timer);
-    if (!box.isConnected) return; // stránka se mezitím přepnula jinam
-    const h = await api('/api/health').catch(() => null);
-    if (h) {
-      state.health = h;
-      paint(h);
-      if (h.progress?.phase === 'idle' && h.deals > 0) return; // hotovo, zbývá jen tlačítko Obnovit
-    }
-    timer = setTimeout(poll, 1000);
+let dlTimer = null;
+let dlKey = null;
+
+/**
+ * Sleduje stahování na serveru. Běží na pozadí: průběh ukazuje v pruhu nad seznamem a když přibude obchod
+ * nebo se stahování skončí, seznam a pásek dnů se načtou znovu. Prohlížet akce jde po celou dobu.
+ */
+async function watchDownload() {
+  clearTimeout(dlTimer);
+  const h = await api('/api/health').catch(() => null);
+  if (!h) {
+    dlTimer = setTimeout(watchDownload, 5000);
+    return;
   }
-  const h0 = state.health;
-  if (h0?.progress?.phase !== 'idle' || h0?.deals === 0) timer = setTimeout(poll, 1000);
+  state.health = h;
+  const p = h.progress ?? { phase: 'idle' };
+  const active = p.phase !== 'idle';
+  $('dlBar').hidden = !active;
+  if (active) $('dlBar').innerHTML = progressView(p);
+  const key = `${p.phase}|${p.done}|${p.deals}`;
+  if (dlKey !== null && key !== dlKey) {
+    load(true);
+    renderDays();
+  }
+  dlKey = key;
+  dlTimer = setTimeout(watchDownload, active ? 2000 : 5000);
+}
+
+/** Prázdná databáze bez stahování: nabídne stažení. Po kliknutí se pruh s průběhem ukáže sám. */
+function showFirstData(grid) {
+  grid.innerHTML = `<div class="empty empty--first"><strong>Zatím tu nejsou žádná data</strong>Stáhni akce z kupi.cz. Potrvá to pár minut a akce se budou objevovat, jak se stahují.
+    <div class="empty__act"><button class="empty__btn" type="button" id="scrapeNow">Stáhnout akce</button></div></div>`;
+  $('scrapeNow').addEventListener('click', async () => {
+    try { await alertsApi('POST', '/api/scrape'); } catch (err) { toast(`Stahování se nepodařilo spustit: ${err.message}`); return; }
+    watchDownload();
+  });
 }
 
 function setView(view) {
@@ -1176,6 +1172,7 @@ async function init() {
   // kliknutí na Windows oznámení otevře aplikaci s #alerts (nebo #alerts/ID jednoho pravidla)
   if (consumeAlertsHash()) state.view = 'alerts';
   setView(state.view);
+  watchDownload(); // průběh stahování na pozadí, seznam se obnovuje sám
 }
 
 /* ——— ovládání ——— */
